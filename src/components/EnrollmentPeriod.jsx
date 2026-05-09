@@ -1,185 +1,361 @@
 // src/components/EnrollmentPeriod.jsx
 import { useState, useEffect } from 'react';
-import {  
-  doc,
-  getDoc,
-  setDoc,
-} from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import './EnrollmentPeriod.css';
+
+const NAVY = "#1a3a6b";
+const GOLD = "#f0c040";
+
+const StatusBadge = ({ status, label }) => {
+  const styles = {
+    open:     "bg-green-100 text-green-800",
+    closed:   "bg-gray-100 text-gray-600",
+    upcoming: "bg-blue-100 text-blue-800",
+    expired:  "bg-red-100 text-red-700",
+  };
+  return (
+    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${styles[status] ?? styles.closed}`}>
+      {label}
+    </span>
+  );
+};
 
 const EnrollmentPeriod = () => {
-  const [enrollmentPeriod, setEnrollmentPeriod] = useState(null);
+  const [enrollmentPeriods, setEnrollmentPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
+  const [editingPeriod, setEditingPeriod] = useState(null);
+  const [availableSemesters, setAvailableSemesters] = useState([]);
   const [formData, setFormData] = useState({
-    semester: '1st Sem 2024-2025',
-    startDate: '',
-    endDate: '',
-    isActive: false
+    semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true
   });
 
+  const emptyForm = { semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true };
+
   useEffect(() => {
-    fetchEnrollmentPeriod();
+    fetchData();
+    const interval = setInterval(checkAndUpdatePeriods, 60000);
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchEnrollmentPeriod = async () => {
+  const fetchData = async () => {
     try {
-      const periodDoc = await getDoc(doc(db, 'settings', 'enrollmentPeriod'));
-      
-      if (periodDoc.exists()) {
-        const data = periodDoc.data();
-        setEnrollmentPeriod(data);
-        setFormData({
-          semester: data.semester || '1st Sem 2024-2025',
-          startDate: data.startDate || '',
-          endDate: data.endDate || '',
-          isActive: data.isActive || false
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching enrollment period:', error);
-    }
+      const [assignSnap, periodsSnap] = await Promise.all([
+        getDocs(collection(db, 'classAssignments')),
+        getDocs(collection(db, 'enrollmentPeriods')),
+      ]);
+      const sems = new Set();
+      assignSnap.docs.forEach(d => sems.add(d.data().semester));
+      setAvailableSemesters(Array.from(sems).sort().reverse());
+
+      const periods = periodsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setEnrollmentPeriods(periods.filter(p => !p.deleted));
+    } catch (e) { console.error(e); }
     setLoading(false);
+  };
+
+  const checkAndUpdatePeriods = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'enrollmentPeriods'));
+      const now = new Date();
+      await Promise.all(snap.docs.map(async d => {
+        const p = d.data();
+        if (!p.autoToggle || p.deleted) return;
+        const shouldBeActive = now >= new Date(p.startDate) && now <= new Date(p.endDate);
+        if (p.isActive !== shouldBeActive) {
+          await setDoc(doc(db, 'enrollmentPeriods', d.id), { ...p, isActive: shouldBeActive, lastAutoUpdate: new Date() });
+        }
+      }));
+      fetchData();
+    } catch (e) { console.error(e); }
   };
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value
-    });
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-
     try {
-      // Validate dates
       if (new Date(formData.startDate) > new Date(formData.endDate)) {
-        alert('End date must be after start date');
-        setSaving(false);
-        return;
+        alert('End date must be after start date'); setSaving(false); return;
+      }
+      const exists = enrollmentPeriods.some(p =>
+        p.semester === formData.semester && (!editingPeriod || p.id !== editingPeriod.id)
+      );
+      if (exists) {
+        alert('An enrollment period already exists for this semester.'); setSaving(false); return;
+      }
+      const now = new Date();
+      const shouldBeActive = formData.autoToggle
+        ? (now >= new Date(formData.startDate) && now <= new Date(formData.endDate))
+        : formData.isActive;
+
+      const data = {
+        semester: formData.semester, startDate: formData.startDate, endDate: formData.endDate,
+        autoToggle: formData.autoToggle, isActive: shouldBeActive, updatedAt: new Date()
+      };
+
+      if (editingPeriod) {
+        await setDoc(doc(db, 'enrollmentPeriods', editingPeriod.id), { ...data, createdAt: editingPeriod.createdAt });
+      } else {
+        await setDoc(doc(db, 'enrollmentPeriods', formData.semester.replace(/\s+/g, '-')), { ...data, createdAt: new Date() });
       }
 
-      await setDoc(doc(db, 'settings', 'enrollmentPeriod'), {
-        ...formData,
-        updatedAt: new Date()
-      });
-
-      alert('Enrollment period settings saved!');
-      fetchEnrollmentPeriod();
-      
-    } catch (error) {
-      console.error('Error saving enrollment period:', error);
-      alert('Error saving settings');
-    }
-
+      setFormData(emptyForm); setEditingPeriod(null); fetchData();
+    } catch (e) { alert('Error saving settings'); }
     setSaving(false);
   };
 
-  const isEnrollmentOpen = () => {
-    if (!enrollmentPeriod || !enrollmentPeriod.isActive) return false;
-    
-    const now = new Date();
-    const start = new Date(enrollmentPeriod.startDate);
-    const end = new Date(enrollmentPeriod.endDate);
-    
-    return now >= start && now <= end;
+  const handleEdit = (period) => {
+    setEditingPeriod(period);
+    setFormData({ semester: period.semester, startDate: period.startDate, endDate: period.endDate, isActive: period.isActive, autoToggle: period.autoToggle });
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  const handleCancelEdit = () => { setEditingPeriod(null); setFormData(emptyForm); };
+
+  const handleToggleActive = async (period) => {
+    if (period.autoToggle) { alert('Auto-toggle is enabled. Edit the period to disable it first.'); return; }
+    try {
+      await setDoc(doc(db, 'enrollmentPeriods', period.id), { ...period, isActive: !period.isActive, updatedAt: new Date() });
+      fetchData();
+    } catch (e) { alert('Error updating status'); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this enrollment period?')) return;
+    try {
+      await setDoc(doc(db, 'enrollmentPeriods', id), { deleted: true, deletedAt: new Date() });
+      fetchData();
+    } catch (e) { alert('Error deleting period'); }
+  };
+
+  const getPeriodStatus = (period) => {
+    const now = new Date();
+    const start = new Date(period.startDate);
+    const end = new Date(period.endDate);
+    if (now < start) return { status: 'upcoming', label: 'Upcoming' };
+    if (now > end)   return { status: 'expired',  label: 'Expired' };
+    if (period.isActive) return { status: 'open', label: 'Open' };
+    return { status: 'closed', label: 'Closed' };
+  };
+
+  const getActivePeriods = () => enrollmentPeriods.filter(p => {
+    if (!p.isActive) return false;
+    const now = new Date();
+    return now >= new Date(p.startDate) && now <= new Date(p.endDate);
+  });
+
+  const labelClass = "block text-xs font-medium text-gray-400 mb-1.5";
+  const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 text-gray-700";
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-16">
+      <div className="w-8 h-8 rounded-full border-4 border-t-transparent animate-spin"
+        style={{ borderColor: `${NAVY} transparent ${NAVY} ${NAVY}` }} />
+    </div>
+  );
+
+  const activePeriods = getActivePeriods();
 
   return (
-    <div className="enrollment-period">
-      <h2>Enrollment Period Settings</h2>
-      <p className="subtitle">Configure when students can enroll</p>
+    <div className="p-6 space-y-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
-      {/* Current Status */}
-      <div className={`status-banner ${isEnrollmentOpen() ? 'open' : 'closed'}`}>
-        <h3>
-          {isEnrollmentOpen() ? '✓ Enrollment is Currently OPEN' : '✕ Enrollment is Currently CLOSED'}
-        </h3>
-        {enrollmentPeriod && (
-          <p>
-            {enrollmentPeriod.semester} | 
-            {new Date(enrollmentPeriod.startDate).toLocaleDateString()} - 
-            {new Date(enrollmentPeriod.endDate).toLocaleDateString()}
-          </p>
-        )}
+      {/* Header */}
+      <div>
+        <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+          Enrollment Period Management
+        </h2>
+        <p className="text-sm text-gray-400 mt-0.5">Set enrollment dates per semester</p>
       </div>
 
-      {/* Settings Form */}
-      <div className="period-form-container">
-        <h3>Configure Enrollment Period</h3>
-        <form onSubmit={handleSave} className="period-form">
-          <div className="form-group">
-            <label>Semester/School Year</label>
-            <input
-              type="text"
-              name="semester"
-              value={formData.semester}
-              onChange={handleInputChange}
-              placeholder="e.g., 1st Sem 2024-2025"
-              required
-            />
+      {/* Status banner */}
+      <div className={`rounded-2xl px-5 py-4 flex items-start gap-4 border ${
+        activePeriods.length > 0
+          ? 'bg-green-50 border-green-200'
+          : 'bg-gray-50 border-gray-200'
+      }`}>
+        <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${activePeriods.length > 0 ? 'bg-green-500' : 'bg-gray-400'}`} />
+        <div>
+          <p className={`font-semibold text-sm ${activePeriods.length > 0 ? 'text-green-800' : 'text-gray-600'}`}>
+            {activePeriods.length > 0 ? 'Enrollment is currently open' : 'Enrollment is currently closed'}
+          </p>
+          {activePeriods.map(p => (
+            <p key={p.id} className="text-xs text-green-700 mt-1">
+              <span className="font-semibold">{p.semester}</span>
+              {' — '}
+              {new Date(p.startDate).toLocaleString()} to {new Date(p.endDate).toLocaleString()}
+            </p>
+          ))}
+        </div>
+      </div>
+
+      {/* Form */}
+      <div className="rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
+          <p className="text-sm font-semibold text-gray-600">
+            {editingPeriod ? `Editing: ${editingPeriod.semester}` : 'Create Enrollment Period'}
+          </p>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-5">
+
+          {/* Semester */}
+          <div>
+            <label className={labelClass}>Semester *</label>
+            <select name="semester" value={formData.semester} onChange={handleInputChange}
+              className={inputClass} required disabled={!!editingPeriod}>
+              <option value="">Select Semester</option>
+              {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Start Date</label>
-              <input
-                type="date"
-                name="startDate"
-                value={formData.startDate}
-                onChange={handleInputChange}
-                required
-              />
+          {/* Date range */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Start Date & Time *</label>
+              <input type="datetime-local" name="startDate" value={formData.startDate}
+                onChange={handleInputChange} className={inputClass} required />
             </div>
-
-            <div className="form-group">
-              <label>End Date</label>
-              <input
-                type="date"
-                name="endDate"
-                value={formData.endDate}
-                onChange={handleInputChange}
-                required
-              />
+            <div>
+              <label className={labelClass}>End Date & Time *</label>
+              <input type="datetime-local" name="endDate" value={formData.endDate}
+                onChange={handleInputChange} className={inputClass} required />
             </div>
           </div>
 
-          <div className="form-group-checkbox">
-            <label>
-              <input
-                type="checkbox"
-                name="isActive"
-                checked={formData.isActive}
+          {/* Toggles */}
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" name="autoToggle" checked={formData.autoToggle}
                 onChange={handleInputChange}
-              />
-              <span>Enrollment is Active (students can enroll)</span>
+                className="mt-0.5 w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+              <div>
+                <p className="text-sm font-medium text-gray-700">Auto-toggle enrollment based on dates</p>
+                <p className="text-xs text-gray-400 mt-0.5">Automatically opens/closes when start/end dates are reached — recommended</p>
+              </div>
             </label>
+
+            {!formData.autoToggle && (
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" name="isActive" checked={formData.isActive}
+                  onChange={handleInputChange}
+                  className="w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+                <p className="text-sm font-medium text-gray-700">Manually set as active now</p>
+              </label>
+            )}
           </div>
 
-          <button type="submit" disabled={saving} className="save-btn">
-            {saving ? 'Saving...' : 'Save Settings'}
-          </button>
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
+            <button type="submit" disabled={saving}
+              className="px-6 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50"
+              style={{ background: NAVY, color: "#fff" }}>
+              {saving ? 'Saving…' : editingPeriod ? 'Update Period' : 'Create Period'}
+            </button>
+            {editingPeriod && (
+              <button type="button" onClick={handleCancelEdit}
+                className="px-6 py-2.5 rounded-full text-sm font-semibold border transition hover:bg-gray-50"
+                style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       </div>
 
-      {/* Info Box */}
-      <div className="info-box">
-        <h4>ℹ️ How it works:</h4>
-        <ul>
-          <li>Set the enrollment period dates</li>
-          <li>Check "Enrollment is Active" to open enrollment</li>
-          <li>Students can only enroll during the active period</li>
-          <li>You can close enrollment anytime by unchecking "Active"</li>
-        </ul>
+      {/* Periods list */}
+      <div className="rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
+          <p className="text-sm font-semibold text-gray-600">
+            All Enrollment Periods ({enrollmentPeriods.length})
+          </p>
+        </div>
+
+        {enrollmentPeriods.length === 0 ? (
+          <div className="px-6 py-10 text-center text-gray-400 text-sm">
+            No enrollment periods configured yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {enrollmentPeriods.map(period => {
+              const { status, label } = getPeriodStatus(period);
+              return (
+                <div key={period.id} className="px-5 py-4 hover:bg-gray-50/50 transition-colors">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+                          {period.semester}
+                        </span>
+                        <StatusBadge status={status} label={label} />
+                        {period.autoToggle && (
+                          <span className="text-xs px-2 py-0.5 rounded-full"
+                            style={{ background: `${GOLD}33`, color: NAVY }}>
+                            Auto
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 space-y-0.5">
+                        <p>Start: {new Date(period.startDate).toLocaleString()}</p>
+                        <p>End: {new Date(period.endDate).toLocaleString()}</p>
+                        {period.lastAutoUpdate && (
+                          <p className="text-gray-300">
+                            Last auto-update: {new Date(period.lastAutoUpdate.seconds * 1000).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {!period.autoToggle && (
+                        <button onClick={() => handleToggleActive(period)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full border transition"
+                          style={period.isActive
+                            ? { background: "#fee2e2", color: "#dc2626", borderColor: "#fca5a5" }
+                            : { background: "#dcfce7", color: "#16a34a", borderColor: "#86efac" }}>
+                          {period.isActive ? 'Close' : 'Open'}
+                        </button>
+                      )}
+                      <button onClick={() => handleEdit(period)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
+                        style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                        Edit
+                      </button>
+                      <button onClick={() => handleDelete(period.id)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                        style={{ background: "#fee2e2", color: "#dc2626" }}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Info box */}
+      <div className="rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${GOLD}18` }}>
+          <p className="text-sm font-semibold" style={{ color: NAVY }}>How Enrollment Works</p>
+        </div>
+        <div className="px-5 py-4 space-y-2">
+          {[
+            ["One period per semester", "Set enrollment dates for each semester individually."],
+            ["Automatic course filtering", "Students automatically see only courses for their program, year, and section."],
+            ["Regular students", "See courses designated for their current year level only."],
+            ["Irregular students", "Can request courses from other year levels through a separate request flow."],
+            ["Auto-toggle", "Enrollment opens and closes automatically based on the dates you set."],
+          ].map(([title, desc]) => (
+            <div key={title} className="flex gap-2.5 text-sm">
+              <div className="w-1.5 h-1.5 rounded-full mt-2 shrink-0" style={{ background: GOLD }} />
+              <p className="text-gray-600"><span className="font-semibold text-gray-800">{title}:</span> {desc}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

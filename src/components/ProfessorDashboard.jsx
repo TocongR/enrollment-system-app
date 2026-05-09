@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import './Dashboard.css';
-import './ProfessorDashboard.css';
+
+const NAVY = "#1a3a6b";
+const GOLD = "#f0c040";
 
 const ProfessorDashboard = () => {
   const { currentUser, logout } = useAuth();
@@ -15,404 +16,413 @@ const ProfessorDashboard = () => {
   const [selectedClass, setSelectedClass] = useState(null);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview'); // overview, schedule
+  const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('1st Sem 2024-2025');
+  const [selectedProgram, setSelectedProgram] = useState('all');
+  const [selectedCourse, setSelectedCourse] = useState('all');
+  const [availableSemesters, setAvailableSemesters] = useState([]);
+  const [availablePrograms, setAvailablePrograms] = useState([]);
+  const [availableCourses, setAvailableCourses] = useState([]);
 
-  const currentSemester = '1st Sem 2024-2025';
+  useEffect(() => { fetchFilters(); }, []);
+  useEffect(() => { if (currentUser && selectedSemester) fetchData(); }, [currentUser, selectedSemester]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (currentUser) {
-        try {
-          // Get user data
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUserData(data);
+  const fetchFilters = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'classAssignments'));
+      const sems = new Set();
+      snap.docs.forEach(d => sems.add(d.data().semester));
+      setAvailableSemesters(Array.from(sems).sort().reverse());
 
-            // Get classes assigned to this professor
-            const classQuery = query(
-              collection(db, 'classAssignments'),
-              where('professorId', '==', data.studentId),
-              where('semester', '==', currentSemester)
-            );
-
-            const classSnapshot = await getDocs(classQuery);
-            const classes = classSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-            setMyClasses(classes);
-          }
-        } catch (error) {
-          console.error('Error fetching data:', error);
-        }
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [currentUser]);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/');
+      const progSnap = await getDocs(collection(db, 'programs'));
+      setAvailablePrograms(progSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (e) { console.error(e); }
   };
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserData(data);
+
+        const snap = await getDocs(query(
+          collection(db, 'classAssignments'),
+          where('professorId', '==', data.studentId),
+          where('semester', '==', selectedSemester)
+        ));
+        const classes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMyClasses(classes);
+
+        const uniqueCourses = [...new Map(classes.map(c =>
+          [c.courseCode, { code: c.courseCode, title: c.courseTitle }]
+        )).values()];
+        setAvailableCourses(uniqueCourses);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const handleLogout = async () => { await logout(); navigate('/'); };
 
   const viewStudents = async (classData) => {
     setSelectedClass(classData);
-    
-    // Get enrolled students for this class
-    const enrollmentQuery = query(
+    const snap = await getDocs(query(
       collection(db, 'enrollments'),
       where('classAssignmentId', '==', classData.id),
       where('status', '==', 'enrolled')
-    );
-
-    const enrollmentSnapshot = await getDocs(enrollmentQuery);
-    const enrolledStudents = enrollmentSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    
-    // Sort by student ID
-    enrolledStudents.sort((a, b) => a.studentId.localeCompare(b.studentId));
-    
-    setStudents(enrolledStudents);
+    ));
+    console.log(classData)
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => a.studentId.localeCompare(b.studentId));
+    setStudents(list);
   };
 
-  const closeStudentList = () => {
-    setSelectedClass(null);
-    setStudents([]);
-    setSearchTerm('');
-  };
+  const closeStudentList = () => { setSelectedClass(null); setStudents([]); setSearchTerm(''); };
 
-//   const getTotalStudents = () => {
-//     return myClasses.reduce((total, classItem) => {
-//       // Count enrolled students for this class
-//       return total + (classItem.enrolledCount || 0);
-//     }, 0);
-//   };
+  const getFilteredClasses = () => myClasses.filter(c => {
+    const matchProg = selectedProgram === 'all' || c.programId === selectedProgram;
+    const matchCourse = selectedCourse === 'all' || c.courseCode === selectedCourse;
+    return matchProg && matchCourse;
+  });
 
-  const getTotalUnits = () => {
-    return myClasses.reduce((total, classItem) => total + classItem.units, 0);
-  };
+  const getTotalUnits = () => getFilteredClasses().reduce((t, c) => t + c.units, 0);
 
-  // Group classes by course
   const getClassesByCourse = () => {
     const grouped = {};
-    
-    myClasses.forEach(classItem => {
-      const key = classItem.courseCode;
-      if (!grouped[key]) {
-        grouped[key] = {
-          courseCode: classItem.courseCode,
-          courseTitle: classItem.courseTitle,
-          units: classItem.units,
-          sections: []
-        };
-      }
-      grouped[key].sections.push(classItem);
+    getFilteredClasses().forEach(c => {
+      if (!grouped[c.courseCode]) grouped[c.courseCode] = { courseCode: c.courseCode, courseTitle: c.courseTitle, units: c.units, sections: [] };
+      grouped[c.courseCode].sections.push(c);
     });
-
     return Object.values(grouped);
   };
 
-  // Filter students by search term
-  const getFilteredStudents = () => {
-    if (!searchTerm) return students;
-    
-    return students.filter(student => 
-      student.studentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.studentName.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  };
+  const getFilteredStudents = () => !searchTerm ? students : students.filter(s =>
+    s.studentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.studentName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  // Export students list as CSV
   const exportToCSV = () => {
-    if (students.length === 0) return;
-
+    if (!students.length) return;
     const headers = ['Student ID', 'Student Name', 'Program', 'Year-Section'];
-    const rows = students.map(s => [
-      s.studentId,
-      s.studentName,
-      s.programId,
-      `${s.yearLevel}${s.section}`
-    ]);
-
-    let csvContent = headers.join(',') + '\n';
-    rows.forEach(row => {
-      csvContent += row.join(',') + '\n';
+    const rows = students.map(s => [s.studentId, s.studentName, s.programId, `${s.yearLevel}${s.section}`]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+      download: `${selectedClass.courseCode}-${selectedClass.programId}${selectedClass.yearLevel}${selectedClass.section}-students.csv`
     });
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${selectedClass.courseCode}-${selectedClass.programId}${selectedClass.yearLevel}${selectedClass.section}-students.csv`;
     a.click();
   };
 
-  // Print student list
   const printStudentList = () => {
-    const printWindow = window.open('', '_blank');
-    
-    const content = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Class List - ${selectedClass.courseCode}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          h1 { color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }
-          .info { margin: 20px 0; color: #666; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-          th { background-color: #667eea; color: white; }
-          tr:nth-child(even) { background-color: #f8f9ff; }
-          @media print {
-            button { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <h1>${selectedClass.courseCode} - ${selectedClass.courseTitle}</h1>
-        <div class="info">
-          <p><strong>Section:</strong> ${selectedClass.programId}-${selectedClass.yearLevel}${selectedClass.section}</p>
-          <p><strong>Professor:</strong> ${userData.fullName}</p>
-          <p><strong>Semester:</strong> ${currentSemester}</p>
-          <p><strong>Total Students:</strong> ${students.length}</p>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Student ID</th>
-              <th>Student Name</th>
-              <th>Program</th>
-              <th>Year-Section</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${students.map((student, index) => `
-              <tr>
-                <td>${index + 1}</td>
-                <td>${student.studentId}</td>
-                <td>${student.studentName}</td>
-                <td>${student.programId}</td>
-                <td>${student.yearLevel}${student.section}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">Print</button>
-      </body>
-      </html>
-    `;
-    
-    printWindow.document.write(content);
-    printWindow.document.close();
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>Class List</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px}h1{color:#1a3a6b;border-bottom:2px solid #1a3a6b;padding-bottom:10px}
+      table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:12px;text-align:left}
+      th{background:#1a3a6b;color:#fff}tr:nth-child(even){background:#f5f7fa}@media print{button{display:none}}</style>
+      </head><body>
+      <h1>${selectedClass.courseCode} — ${selectedClass.courseTitle}</h1>
+      <p><strong>Section:</strong> ${selectedClass.programId}-${selectedClass.yearLevel}${selectedClass.section}</p>
+      <p><strong>Professor:</strong> ${userData.fullName}</p>
+      <p><strong>Semester:</strong> ${selectedSemester}</p>
+      <p><strong>Total Students:</strong> ${students.length}</p>
+      <table><thead><tr><th>#</th><th>Student ID</th><th>Name</th><th>Program</th><th>Year-Sec</th></tr></thead>
+      <tbody>${students.map((s, i) => `<tr><td>${i + 1}</td><td>${s.studentId}</td><td>${s.studentName}</td><td>${s.programId}</td><td>${s.yearLevel}${s.section}</td></tr>`).join('')}</tbody>
+      </table><button onclick="window.print()" style="margin-top:20px;padding:10px 20px;background:#1a3a6b;color:#fff;border:none;border-radius:5px;cursor:pointer">Print</button>
+      </body></html>`);
+    w.document.close();
   };
 
-  if (loading) {
-    return <div className="loading">Loading...</div>;
-  }
+  if (loading) return (
+    <div className="flex h-screen items-center justify-center" style={{ background: "#f5f7fa" }}>
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 rounded-full border-4 border-t-transparent animate-spin" style={{ borderColor: `${NAVY} transparent ${NAVY} ${NAVY}` }} />
+        <p className="text-sm text-gray-500">Loading your portal…</p>
+      </div>
+    </div>
+  );
+
+  const filtered = getFilteredClasses();
+  const byCourse = getClassesByCourse();
+  const hasActiveFilters = selectedProgram !== 'all' || selectedCourse !== 'all';
 
   return (
-    <div className="dashboard-container">
-      <nav className="dashboard-nav">
-        <h2>Professor Portal</h2>
-        <button onClick={handleLogout} className="logout-btn">Logout</button>
+    <div className="min-h-screen" style={{ background: "#f5f7fa", fontFamily: "'DM Sans', sans-serif" }}>
+
+      {/* Navbar */}
+      <nav className="flex items-center justify-between px-6 py-3 shadow-sm" style={{ background: NAVY }}>
+        <div className="flex items-center gap-3">
+          <span className="font-bold text-sm px-2.5 py-1 rounded-md" style={{ background: GOLD, color: NAVY, fontFamily: "'Sora', sans-serif" }}>ENROLL</span>
+          <span className="text-white/60 text-sm hidden sm:block">Professor Portal</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-white text-sm font-medium hidden sm:block">{userData?.fullName}</span>
+          <button
+            onClick={handleLogout}
+            className="text-sm font-semibold px-4 py-1.5 rounded-full border transition hover:bg-white/10"
+            style={{ borderColor: "rgba(255,255,255,0.3)", color: "#fff" }}
+          >
+            Logout
+          </button>
+        </div>
       </nav>
-      
-      <div className="dashboard-content">
-        <div className="welcome-card">
-          <h1>Welcome, {userData?.fullName}!</h1>
-          <div className="user-info">
-            <p><strong>Professor ID:</strong> {userData?.studentId}</p>
-            <p><strong>Semester:</strong> {currentSemester}</p>
+
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+        {/* Profile card */}
+        <div className="rounded-2xl overflow-hidden shadow-sm" style={{ background: NAVY }}>
+          <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-xl shrink-0" style={{ background: GOLD, color: NAVY }}>
+              {userData?.fullName?.charAt(0) ?? "P"}
+            </div>
+            <div className="text-white flex-1">
+              <h1 className="text-xl font-bold" style={{ fontFamily: "'Sora', sans-serif" }}>Welcome, {userData?.fullName}!</h1>
+              <p className="text-white/60 text-sm mt-0.5">Professor ID: {userData?.studentId}</p>
+            </div>
+            <select
+              value={selectedSemester}
+              onChange={e => setSelectedSemester(e.target.value)}
+              className="text-sm rounded-lg px-3 py-2 border-0 outline-none cursor-pointer font-medium"
+              style={{ background: "rgba(255,255,255,0.15)", color: "#fff" }}
+            >
+              {availableSemesters.map(s => <option key={s} value={s} style={{ color: NAVY }}>{s}</option>)}
+            </select>
           </div>
         </div>
 
-        {/* Statistics */}
-        <div className="stats-grid">
-          <div className="stat-card">
-            <h3>{myClasses.length}</h3>
-            <p>Total Classes</p>
-          </div>
-          <div className="stat-card">
-            <h3>{getTotalUnits()}</h3>
-            <p>Total Units</p>
-          </div>
-          <div className="stat-card">
-            <h3>{getClassesByCourse().length}</h3>
-            <p>Unique Courses</p>
+        {/* Stat cards */}
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: "Classes", value: filtered.length },
+            { label: "Total Units", value: getTotalUnits() },
+            { label: "Unique Courses", value: byCourse.length },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 text-center">
+              <p className="text-3xl font-bold" style={{ color: NAVY, fontFamily: "'Sora', sans-serif" }}>{s.value}</p>
+              <p className="text-sm text-gray-400 mt-1">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            {[
+              {
+                label: "Program", value: selectedProgram, onChange: e => setSelectedProgram(e.target.value),
+                options: [{ value: "all", label: "All Programs" }, ...availablePrograms.map(p => ({ value: p.code, label: p.code }))]
+              },
+              {
+                label: "Course", value: selectedCourse, onChange: e => setSelectedCourse(e.target.value),
+                options: [{ value: "all", label: "All Courses" }, ...availableCourses.map(c => ({ value: c.code, label: `${c.code} — ${c.title}` }))]
+              },
+            ].map(f => (
+              <div key={f.label} className="flex flex-col gap-1 min-w-[160px]">
+                <label className="text-xs text-gray-400 font-medium">{f.label}</label>
+                <select
+                  value={f.value}
+                  onChange={f.onChange}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2"
+                  style={{ color: "#374151" }}
+                >
+                  {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            ))}
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setSelectedProgram('all'); setSelectedCourse('all'); }}
+                className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
+                style={{ borderColor: "#e5e7eb", color: "#6b7280" }}
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="admin-tabs">
-          <button 
-            className={activeTab === 'overview' ? 'active' : ''} 
-            onClick={() => setActiveTab('overview')}
-          >
-            My Classes
-          </button>
-          <button 
-            className={activeTab === 'schedule' ? 'active' : ''} 
-            onClick={() => setActiveTab('schedule')}
-          >
-            By Course
-          </button>
+        <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-gray-100">
+          {[
+            { key: "overview", label: `My Classes (${filtered.length})` },
+            { key: "schedule", label: `By Course (${byCourse.length})` },
+          ].map(t => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className="flex-1 text-sm font-semibold py-2.5 rounded-lg transition-all"
+              style={activeTab === t.key ? { background: NAVY, color: "#fff" } : { background: "transparent", color: "#6b7280" }}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* Overview Tab - All Classes */}
+        {/* Overview tab */}
         {activeTab === 'overview' && (
-          <div className="enrollment-section">
-            <h2>My Teaching Load</h2>
-            
-            {myClasses.length === 0 ? (
-              <p>No classes assigned for this semester.</p>
-            ) : (
-              <div className="professor-classes">
-                {myClasses.map((classData) => (
-                  <div key={classData.id} className="professor-class-card">
-                    <div className="class-card-header">
-                      <h3>{classData.courseCode}</h3>
-                      <span className="section-badge">
-                        {classData.programId}-{classData.yearLevel}{classData.section}
+          filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl px-6 py-10 text-center text-gray-400 shadow-sm border border-gray-100">
+              No classes found with the selected filters.
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-4">
+              {filtered.map(c => (
+                <div key={c.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>{c.courseCode}</span>
+                      <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: `${GOLD}33`, color: NAVY }}>
+                        {c.programId}-{c.yearLevel}{c.section}
                       </span>
                     </div>
-                    <h4>{classData.courseTitle}</h4>
-                    <div className="class-info">
-                      <p><strong>Units:</strong> {classData.units}</p>
-                      <p><strong>Program:</strong> {classData.programName}</p>
-                    </div>
-                    <button 
-                      onClick={() => viewStudents(classData)}
-                      className="view-students-btn"
+                    <span className="text-xs text-gray-400">{c.units} units</span>
+                  </div>
+                  <div className="px-5 py-4">
+                    <p className="text-sm text-gray-600 mb-1">{c.courseTitle}</p>
+                    <p className="text-xs text-gray-400">{c.programName}</p>
+                  </div>
+                  <div className="px-5 pb-4">
+                    <button
+                      onClick={() => viewStudents(c)}
+                      className="w-full py-2 rounded-full text-sm font-semibold transition"
+                      style={{ background: NAVY, color: "#fff" }}
                     >
                       View Students
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
 
-        {/* By Course Tab */}
+        {/* By Course tab */}
         {activeTab === 'schedule' && (
-          <div className="enrollment-section">
-            <h2>Classes by Course</h2>
-            
-            {getClassesByCourse().length === 0 ? (
-              <p>No classes assigned.</p>
-            ) : (
-              <div className="courses-grouped">
-                {getClassesByCourse().map((course, index) => (
-                  <div key={index} className="course-group">
-                    <div className="course-group-header">
-                      <h3>{course.courseCode} - {course.courseTitle}</h3>
-                      <span className="units-badge">{course.units} units</span>
+          byCourse.length === 0 ? (
+            <div className="bg-white rounded-2xl px-6 py-10 text-center text-gray-400 shadow-sm border border-gray-100">
+              No courses found with the selected filters.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {byCourse.map((course, i) => (
+                <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between" style={{ background: `${NAVY}08` }}>
+                    <div>
+                      <span className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>{course.courseCode}</span>
+                      <span className="ml-2 text-sm text-gray-500">— {course.courseTitle}</span>
                     </div>
-                    <div className="sections-list">
-                      {course.sections.map((section) => (
-                        <div key={section.id} className="section-item">
-                          <div className="section-info">
-                            <h4>{section.programId}-{section.yearLevel}{section.section}</h4>
-                            <p>{section.programName}</p>
-                          </div>
-                          <button 
-                            onClick={() => viewStudents(section)}
-                            className="view-btn-small"
-                          >
-                            View Students
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: `${GOLD}33`, color: NAVY }}>
+                      {course.units} units
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <div className="divide-y divide-gray-50">
+                    {course.sections.map(sec => (
+                      <div key={sec.id} className="px-5 py-3 flex items-center justify-between gap-4">
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">{sec.programId}-{sec.yearLevel}{sec.section}</p>
+                          <p className="text-xs text-gray-400">{sec.programName}</p>
+                        </div>
+                        <button
+                          onClick={() => viewStudents(sec)}
+                          className="text-sm font-semibold px-4 py-1.5 rounded-full border-2 transition hover:bg-blue-50 shrink-0"
+                          style={{ borderColor: NAVY, color: NAVY }}
+                        >
+                          View Students
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
 
-      {/* Student List Modal */}
+      {/* Student list modal */}
       {selectedClass && (
-        <div className="modal-overlay" onClick={closeStudentList}>
-          <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+
+            {/* Modal header */}
+            <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div>
-                <h2>{selectedClass.courseCode} - {selectedClass.courseTitle}</h2>
-                <p className="modal-subtitle">
-                  {selectedClass.programId}-{selectedClass.yearLevel}{selectedClass.section} | 
-                  {students.length} Student{students.length !== 1 ? 's' : ''} Enrolled
+                <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+                  {selectedClass.courseCode} — {selectedClass.courseTitle}
+                </h2>
+                <p className="text-sm text-gray-400 mt-0.5">
+                  {selectedClass.programId}-{selectedClass.yearLevel}{selectedClass.section} · {students.length} student{students.length !== 1 ? 's' : ''} enrolled
                 </p>
               </div>
-              <button onClick={closeStudentList} className="close-btn">×</button>
+              <button onClick={closeStudentList} className="text-gray-400 hover:text-gray-600 text-xl leading-none ml-4">×</button>
             </div>
-            
-            <div className="modal-body">
-              {/* Search and Actions */}
-              <div className="student-list-controls">
-                <div className="search-box">
-                  <input
-                    type="text"
-                    placeholder="🔍 Search by Student ID or Name..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-                <div className="action-buttons-group">
-                  <button onClick={exportToCSV} className="export-btn">
-                    📥 Export CSV
-                  </button>
-                  <button onClick={printStudentList} className="print-btn">
-                    🖨️ Print List
-                  </button>
-                </div>
-              </div>
 
-              {/* Student Table */}
+            {/* Controls */}
+            <div className="px-6 py-4 border-b border-gray-50 flex flex-wrap gap-3 items-center shrink-0">
+              <input
+                type="text"
+                placeholder="Search by ID or name…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="flex-1 min-w-[180px] border border-gray-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={exportToCSV}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
+                  style={{ borderColor: "#e5e7eb", color: "#374151" }}
+                >
+                  Export CSV
+                </button>
+                <button
+                  onClick={printStudentList}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg transition"
+                  style={{ background: NAVY, color: "#fff" }}
+                >
+                  Print List
+                </button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-y-auto flex-1">
               {students.length === 0 ? (
-                <p className="no-students">No students enrolled yet.</p>
+                <div className="px-6 py-10 text-center text-gray-400 text-sm">No students enrolled yet.</div>
               ) : (
                 <>
-                  <p className="showing-count">
+                  <p className="px-6 pt-3 pb-1 text-xs text-gray-400">
                     Showing {getFilteredStudents().length} of {students.length} students
                   </p>
-                  <div className="table-container">
-                    <table className="student-table">
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>Student ID</th>
-                          <th>Name</th>
-                          <th>Program</th>
-                          <th>Year-Section</th>
-                          <th>Status</th>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                        <th className="px-6 py-2 font-medium">#</th>
+                        <th className="px-6 py-2 font-medium">Student ID</th>
+                        <th className="px-6 py-2 font-medium">Name</th>
+                        <th className="px-6 py-2 font-medium">Program</th>
+                        <th className="px-6 py-2 font-medium">Year-Sec</th>
+                        <th className="px-6 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {getFilteredStudents().map((s, i) => (
+                        <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-3 text-gray-400">{i + 1}</td>
+                          <td className="px-6 py-3 font-medium text-gray-700">{s.studentId}</td>
+                          <td className="px-6 py-3 text-gray-800">{s.studentName}</td>
+                          <td className="px-6 py-3 text-gray-500">{s.programId}</td>
+                          <td className="px-6 py-3 text-gray-500">{s.yearLevel}{s.section}</td>
+                          <td className="px-6 py-3">
+                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-800">
+                              Enrolled
+                            </span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {getFilteredStudents().map((student, index) => (
-                          <tr key={student.id}>
-                            <td>{index + 1}</td>
-                            <td>{student.studentId}</td>
-                            <td>{student.studentName}</td>
-                            <td>{student.programId}</td>
-                            <td>{student.yearLevel}{student.section}</td>
-                            <td>
-                              <span className="status-badge status-enrolled">
-                                {student.status.toUpperCase()}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 </>
               )}
             </div>

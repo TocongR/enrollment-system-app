@@ -5,13 +5,13 @@ import { getFirestore } from 'firebase/firestore';
 
 // Configuration
 const firebaseConfig = {
-    apiKey: "AIzaSyDlkAZzWrR5ajVwhHFupKUe1eobcd7Kuk8",
-    authDomain: "univ-enrollment-sy.firebaseapp.com",
-    projectId: "univ-enrollment-sy",
-    storageBucket: "univ-enrollment-sy.firebasestorage.app",
-    messagingSenderId: "1025181197864",
-    appId: "1:1025181197864:web:1d490f5210a25b440df71d"
-};
+    apiKey: "AIzaSyCmKb6ZNlKBnd1jDuftwXfSqJEjhrR4BEY",
+    authDomain: "enrollment-sys-406bd.firebaseapp.com",
+    projectId: "enrollment-sys-406bd",
+    storageBucket: "enrollment-sys-406bd.firebasestorage.app",
+    messagingSenderId: "23489998883",
+    appId: "1:23489998883:web:dd4a2df9872a5ac0eb8196"
+  };
   
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

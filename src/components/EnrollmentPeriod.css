@@ -47,17 +47,13 @@
     color: #721c24;
   }
   
-  .status-banner p {
-    margin: 0;
+  .active-periods p {
+    margin: 5px 0;
     font-size: 14px;
   }
   
-  .status-banner.open p {
+  .status-banner.open .active-periods p {
     color: #155724;
-  }
-  
-  .status-banner.closed p {
-    color: #721c24;
   }
   
   /* Form */
@@ -65,7 +61,7 @@
     background: #f8f9ff;
     padding: 25px;
     border-radius: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 30px;
   }
   
   .period-form-container h3 {
@@ -91,16 +87,24 @@
     font-size: 14px;
   }
   
-  .form-group input {
+  .form-group input,
+  .form-group select {
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 5px;
     font-size: 14px;
   }
   
-  .form-group input:focus {
+  .form-group input:focus,
+  .form-group select:focus {
     outline: none;
     border-color: #667eea;
+  }
+  
+  .form-group small {
+    margin-top: 5px;
+    color: #666;
+    font-size: 12px;
   }
   
   .form-row {
@@ -111,7 +115,8 @@
   
   .form-group-checkbox {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 5px;
     padding: 15px;
     background: white;
     border-radius: 5px;
@@ -137,6 +142,17 @@
     font-weight: 600;
   }
   
+  .form-group-checkbox small {
+    margin-left: 30px;
+    color: #666;
+    font-size: 12px;
+  }
+  
+  .form-actions {
+    display: flex;
+    gap: 10px;
+  }
+  
   .save-btn {
     padding: 12px 24px;
     background: #667eea;
@@ -146,7 +162,7 @@
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
-    width: fit-content;
+    width: auto;
   }
   
   .save-btn:hover:not(:disabled) {
@@ -158,12 +174,188 @@
     cursor: not-allowed;
   }
   
+  .cancel-btn {
+    padding: 12px 24px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    width: auto;
+  }
+  
+  .cancel-btn:hover {
+    background: #5a6268;
+  }
+  
+  /* Periods List */
+  .periods-list {
+    margin-top: 30px;
+  }
+  
+  .periods-list h3 {
+    margin: 0 0 20px 0;
+    color: #333;
+  }
+  
+  .periods-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 20px;
+  }
+  
+  .period-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 20px;
+    transition: all 0.3s;
+  }
+  
+  .period-card.open {
+    border-color: #28a745;
+    background: #f0fff4;
+  }
+  
+  .period-card.upcoming {
+    border-color: #ffc107;
+    background: #fffef0;
+  }
+  
+  .period-card.expired {
+    border-color: #6c757d;
+    background: #f8f9fa;
+    opacity: 0.7;
+  }
+  
+  .period-card.closed {
+    border-color: #dc3545;
+    background: #fff5f5;
+  }
+  
+  .period-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e0e0e0;
+  }
+  
+  .period-header h4 {
+    margin: 0;
+    color: #333;
+    font-size: 18px;
+  }
+  
+  .status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  
+  .badge-open {
+    background: #28a745;
+    color: white;
+  }
+  
+  .badge-upcoming {
+    background: #ffc107;
+    color: #000;
+  }
+  
+  .badge-expired {
+    background: #6c757d;
+    color: white;
+  }
+  
+  .badge-closed {
+    background: #dc3545;
+    color: white;
+  }
+  
+  .period-details {
+    margin-bottom: 15px;
+  }
+  
+  .period-details p {
+    margin: 8px 0;
+    color: #666;
+    font-size: 14px;
+  }
+  
+  .last-update {
+    font-style: italic;
+  }
+  
+  .period-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  
+  .edit-btn {
+    padding: 8px 16px;
+    background: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    width: auto;
+  }
+  
+  .edit-btn:hover {
+    background: #138496;
+  }
+  
+  .toggle-btn {
+    padding: 8px 16px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    width: auto;
+  }
+  
+  .toggle-btn.active {
+    background: #28a745;
+  }
+  
+  .toggle-btn:hover {
+    opacity: 0.9;
+  }
+  
+  .delete-btn-small {
+    padding: 8px 16px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    width: auto;
+  }
+  
+  .delete-btn-small:hover {
+    background: #c82333;
+  }
+  
   /* Info Box */
   .info-box {
     background: #e7f3ff;
     border-left: 4px solid #2196F3;
     padding: 20px;
     border-radius: 5px;
+    margin-top: 30px;
   }
   
   .info-box h4 {
@@ -179,4 +371,19 @@
   .info-box li {
     margin: 8px 0;
     color: #0c5da5;
+  }
+  
+  .info-box strong {
+    color: #0a4d8a;
+  }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .periods-grid {
+      grid-template-columns: 1fr;
+    }
+  
+    .form-row {
+      grid-template-columns: 1fr;
+    }
   }
