@@ -1,5 +1,5 @@
 // src/components/EnrollmentPeriod.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -32,13 +32,8 @@ const EnrollmentPeriod = () => {
 
   const emptyForm = { semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true };
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(checkAndUpdatePeriods, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchData = async () => {
+  // Wrapped in useCallback so it has a stable reference for useEffect deps
+  const fetchData = useCallback(async () => {
     try {
       const [assignSnap, periodsSnap] = await Promise.all([
         getDocs(collection(db, 'classAssignments')),
@@ -52,9 +47,10 @@ const EnrollmentPeriod = () => {
       setEnrollmentPeriods(periods.filter(p => !p.deleted));
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, []);
 
-  const checkAndUpdatePeriods = async () => {
+  // Wrapped in useCallback with fetchData as a dependency
+  const checkAndUpdatePeriods = useCallback(async () => {
     try {
       const snap = await getDocs(collection(db, 'enrollmentPeriods'));
       const now = new Date();
@@ -68,7 +64,14 @@ const EnrollmentPeriod = () => {
       }));
       fetchData();
     } catch (e) { console.error(e); }
-  };
+  }, [fetchData]);
+
+  // Both functions are now stable references — safe to include in deps
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(checkAndUpdatePeriods, 60000);
+    return () => clearInterval(interval);
+  }, [fetchData, checkAndUpdatePeriods]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;

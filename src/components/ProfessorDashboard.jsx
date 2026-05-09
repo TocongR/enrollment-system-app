@@ -1,7 +1,7 @@
 // src/components/ProfessorDashboard.jsx
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -25,10 +25,8 @@ const ProfessorDashboard = () => {
   const [availablePrograms, setAvailablePrograms] = useState([]);
   const [availableCourses, setAvailableCourses] = useState([]);
 
-  useEffect(() => { fetchFilters(); }, []);
-  useEffect(() => { if (currentUser && selectedSemester) fetchData(); }, [currentUser, selectedSemester]);
-
-  const fetchFilters = async () => {
+  // No external deps — safe with empty array
+  const fetchFilters = useCallback(async () => {
     try {
       const snap = await getDocs(collection(db, 'classAssignments'));
       const sems = new Set();
@@ -38,9 +36,10 @@ const ProfessorDashboard = () => {
       const progSnap = await getDocs(collection(db, 'programs'));
       setAvailablePrograms(progSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
-  };
+  }, []);
 
-  const fetchData = async () => {
+  // Depends on currentUser and selectedSemester — must be listed
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
@@ -63,7 +62,10 @@ const ProfessorDashboard = () => {
       }
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [currentUser, selectedSemester]);
+
+  useEffect(() => { fetchFilters(); }, [fetchFilters]);
+  useEffect(() => { if (currentUser && selectedSemester) fetchData(); }, [currentUser, selectedSemester, fetchData]);
 
   const handleLogout = async () => { await logout(); navigate('/'); };
 

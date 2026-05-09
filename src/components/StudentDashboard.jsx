@@ -1,7 +1,7 @@
 // src/components/StudentDashboard.jsx
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   doc, getDoc, collection, query, where,
   getDocs, addDoc, updateDoc,
@@ -54,19 +54,32 @@ const StudentDashboard = () => {
   const [selectedAddCourse, setSelectedAddCourse] = useState("");
   const [addCourseReason, setAddCourseReason] = useState("");
 
-  useEffect(() => { fetchAvailableSemesters(); }, []);
-  useEffect(() => { if (currentUser && selectedSemester) fetchData(); }, [currentUser, selectedSemester]);
-
-  const fetchAvailableSemesters = async () => {
+  // No external deps — stable with empty array
+  const fetchAvailableSemesters = useCallback(async () => {
     try {
       const snap = await getDocs(collection(db, "classAssignments"));
       const sems = new Set();
       snap.docs.forEach(d => sems.add(d.data().semester));
       setAvailableSemesters(Array.from(sems).sort().reverse());
     } catch (e) { console.error(e); }
-  };
+  }, []);
 
-  const fetchData = async () => {
+  // Depends on selectedSemester — must be listed
+  const checkEnrollmentPeriod = useCallback(async () => {
+    try {
+      const snap = await getDocs(collection(db, "enrollmentPeriods"));
+      const now = new Date();
+      const open = snap.docs.some(d => {
+        const p = d.data();
+        if (p.deleted || !p.isActive || p.semester !== selectedSemester) return false;
+        return now >= new Date(p.startDate) && now <= new Date(p.endDate);
+      });
+      setEnrollmentPeriodOpen(open);
+    } catch (e) { setEnrollmentPeriodOpen(false); }
+  }, [selectedSemester]);
+
+  // Depends on currentUser, selectedSemester, and checkEnrollmentPeriod
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const userDoc = await getDoc(doc(db, "users", currentUser.uid));
@@ -93,20 +106,10 @@ const StudentDashboard = () => {
       await checkEnrollmentPeriod();
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, [currentUser, selectedSemester, checkEnrollmentPeriod]);
 
-  const checkEnrollmentPeriod = async () => {
-    try {
-      const snap = await getDocs(collection(db, "enrollmentPeriods"));
-      const now = new Date();
-      const open = snap.docs.some(d => {
-        const p = d.data();
-        if (p.deleted || !p.isActive || p.semester !== selectedSemester) return false;
-        return now >= new Date(p.startDate) && now <= new Date(p.endDate);
-      });
-      setEnrollmentPeriodOpen(open);
-    } catch (e) { setEnrollmentPeriodOpen(false); }
-  };
+  useEffect(() => { fetchAvailableSemesters(); }, [fetchAvailableSemesters]);
+  useEffect(() => { if (currentUser && selectedSemester) fetchData(); }, [currentUser, selectedSemester, fetchData]);
 
   const handleLogout = async () => { await logout(); navigate("/"); };
 
