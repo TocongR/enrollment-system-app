@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { setupUsers } from '../setupUsers';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -43,21 +42,6 @@ const Login = () => {
     setLoading(false);
   };
 
-  const handleDevSetup = async () => {
-    const confirmRun = window.confirm(
-      "This will generate bulk test users, courses, and enrollments. Continue?"
-    );
-  
-    if (!confirmRun) return;
-  
-    try {
-      await setupUsers();
-      alert("✅ Test environment created successfully!");
-    } catch (error) {
-      console.error(error);
-      alert("❌ Setup failed. Check console.");
-    }
-  };
 
   return (
     <div className="flex h-screen font-sans">
@@ -159,12 +143,6 @@ const Login = () => {
           </form>
           
   <div className="mt-6 text-center">
-    <button
-      onClick={handleDevSetup}
-      className="text-xs text-gray-400 hover:text-gray-600 underline"
-    >
-      Run Dev Setup
-    </button>
   </div>
 
  
