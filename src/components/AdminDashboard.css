@@ -1,0 +1,253 @@
+/* src/components/AdminDashboard.css */
+
+/* Statistics Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  
+  .stat-card {
+    background: white;
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    border-left: 4px solid #667eea;
+  }
+  
+  .stat-card.pending {
+    border-left-color: #ffc107;
+  }
+  
+  .stat-card.enrolled {
+    border-left-color: #28a745;
+  }
+  
+  .stat-card h3 {
+    font-size: 36px;
+    margin: 0 0 10px 0;
+    color: #333;
+  }
+  
+  .stat-card p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+  }
+  
+  /* Tabs */
+  .admin-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+  }
+  
+  .admin-tabs button {
+    padding: 12px 24px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #666;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s;
+    width: auto;
+  }
+  
+  .admin-tabs button:hover {
+    color: #667eea;
+    background: #f8f9ff;
+  }
+  
+  .admin-tabs button.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+    font-weight: 600;
+  }
+  
+  /* Admin Section */
+  .admin-section {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .admin-section h2 {
+    margin: 0 0 20px 0;
+    color: #333;
+  }
+  
+  /* Table Container */
+  .table-container {
+    overflow-x: auto;
+  }
+  
+  .admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  
+  .admin-table th {
+    background: #f8f9ff;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #333;
+    border-bottom: 2px solid #e0e0e0;
+    white-space: nowrap;
+  }
+  
+  .admin-table td {
+    padding: 12px;
+    border-bottom: 1px solid #e0e0e0;
+    vertical-align: middle;
+  }
+  
+  .admin-table tbody tr:hover {
+    background: #f8f9ff;
+  }
+  
+  .admin-table small {
+    color: #666;
+    font-size: 12px;
+  }
+  
+  /* Action Buttons */
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .approve-btn,
+  .reject-btn,
+  .drop-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    width: auto;
+  }
+  
+  .approve-btn {
+    background: #28a745;
+    color: white;
+  }
+  
+  .approve-btn:hover {
+    background: #218838;
+  }
+  
+  .reject-btn {
+    background: #dc3545;
+    color: white;
+  }
+  
+  .reject-btn:hover {
+    background: #c82333;
+  }
+  
+  .drop-btn {
+    background: #ffc107;
+    color: #000;
+  }
+  
+  .drop-btn:hover {
+    background: #e0a800;
+  }
+  
+  /* Course Overview Grid */
+  .course-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+  }
+  
+  .course-overview-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.3s;
+  }
+  
+  .course-overview-card:hover {
+    border-color: #667eea;
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .course-overview-card h3 {
+    margin: 0 0 8px 0;
+    color: #667eea;
+    font-size: 20px;
+  }
+  
+  .course-title {
+    color: #666;
+    font-size: 14px;
+    margin: 0 0 20px 0;
+  }
+  
+  .enrollment-count {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 15px;
+    border-top: 2px solid #f0f0f0;
+  }
+  
+  .enrollment-count .count {
+    font-size: 32px;
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .enrollment-count .label {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+  }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .admin-tabs {
+      flex-direction: column;
+    }
+  
+    .admin-tabs button {
+      border-bottom: none;
+      border-left: 3px solid transparent;
+    }
+  
+    .admin-tabs button.active {
+      border-left-color: #667eea;
+    }
+  
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+  
+    .action-buttons {
+      flex-direction: column;
+    }
+  
+    .table-container {
+      overflow-x: scroll;
+    }
+
+    .drop-reason {
+        max-width: 200px;
+        font-size: 13px;
+        color: #666;
+        font-style: italic;
+      }
+  }

@@ -1,24 +1,640 @@
-/* src/components/Dashboard.css */
-.dashboard-container {
-    min-height: 100vh;
-    background: #f5f5f5;
+/* Existing styles remain... */
+
+/* Enrollment Section */
+.enrollment-section {
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+}
+
+.enrollment-section h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+/* Courses Checklist */
+.courses-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.course-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.course-item:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+}
+
+.course-item.enrolled-item {
+  background: #f0f0f0;
+  opacity: 0.7;
+}
+
+.course-checkbox {
+  margin-right: 15px;
+  padding-top: 5px;
+}
+
+.course-checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.course-checkbox input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.course-details {
+  flex: 1;
+  cursor: pointer;
+}
+
+.course-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.course-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.course-info {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.course-info strong {
+  margin-right: 5px;
+}
+
+/* Status Badge */
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-enrolled {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-rejected {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.status-dropped {
+  background: #e2e3e5;
+  color: #383d41;
+}
+
+/* Enrollment Summary */
+.enrollment-summary {
+  background: #f8f9ff;
+  padding: 20px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.enrollment-summary p {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.enroll-btn {
+  padding: 12px 30px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  width: auto;
+}
+
+.enroll-btn:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.enroll-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Enrolled Section */
+.enrolled-section {
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.enrolled-section h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.enrolled-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.enrolled-course {
+  padding: 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  position: relative;
+}
+
+.enrolled-course h3 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.enrolled-course p {
+  margin: 5px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.enrolled-course .status-badge {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-size: 20px;
+  color: #667eea;
+}
+
+/* Existing styles remain... */
+
+/* Enrollment Section */
+.enrollment-section {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
   }
   
-  .dashboard-nav {
+  .enrollment-section h2 {
+    margin-bottom: 20px;
+    color: #333;
+  }
+  
+  /* Courses Checklist */
+  .courses-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 20px;
+  }
+  
+  .course-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    transition: all 0.3s;
+  }
+  
+  .course-item:hover {
+    border-color: #667eea;
+    background: #f8f9ff;
+  }
+  
+  .course-item.enrolled-item {
+    background: #f0f0f0;
+    opacity: 0.7;
+  }
+  
+  .course-checkbox {
+    margin-right: 15px;
+    padding-top: 5px;
+  }
+  
+  .course-checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+  }
+  
+  .course-checkbox input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+  }
+  
+  .course-details {
+    flex: 1;
+    cursor: pointer;
+  }
+  
+  .course-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  
+  .course-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 18px;
+  }
+  
+  .course-info {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+  }
+  
+  .course-info strong {
+    margin-right: 5px;
+  }
+  
+  /* Status Badge */
+  .status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  
+  .status-pending {
+    background: #fff3cd;
+    color: #856404;
+  }
+  
+  .status-enrolled {
+    background: #d4edda;
+    color: #155724;
+  }
+  
+  .status-rejected {
+    background: #f8d7da;
+    color: #721c24;
+  }
+  
+  .status-dropped {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+  
+  /* Enrollment Summary */
+  .enrollment-summary {
+    background: #f8f9ff;
+    padding: 20px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+  
+  .enrollment-summary p {
+    margin: 0;
+    font-size: 16px;
+    color: #333;
+  }
+  
+  .enroll-btn {
+    padding: 12px 30px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    width: auto;
+  }
+  
+  .enroll-btn:hover:not(:disabled) {
+    background: #5568d3;
+  }
+  
+  .enroll-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+  
+  /* Enrolled Section */
+  .enrolled-section {
     background: white;
-    padding: 20px 40px;
+    padding: 30px;
+    border-radius: 10px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .enrolled-section h2 {
+    margin-bottom: 20px;
+    color: #333;
+  }
+  
+  .enrolled-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+  }
+  
+  .enrolled-course {
+    padding: 20px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    position: relative;
+  }
+  
+  .enrolled-course h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 16px;
+  }
+  
+  .enrolled-course p {
+    margin: 5px 0;
+    color: #666;
+    font-size: 14px;
+  }
+  
+  .enrolled-course .status-badge {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+  }
+  
+  /* Loading */
+  .loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-size: 20px;
+    color: #667eea;
+  }
+
+  /* Professor Classes */
+.professor-classes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  
+  .professor-class-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+  }
+  
+  .professor-class-card h3 {
+    margin: 0 0 15px 0;
+    color: #667eea;
+  }
+  
+  .professor-class-card p {
+    margin: 8px 0;
+    color: #666;
+  }
+  
+  .view-students-btn {
+    margin-top: 15px;
+    padding: 10px 20px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+    font-weight: 600;
+  }
+  
+  .view-students-btn:hover {
+    background: #5568d3;
+  }
+  
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .modal-content {
+    background: white;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .modal-header {
+    padding: 20px;
+    border-bottom: 2px solid #e0e0e0;
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
   
-  .dashboard-nav h2 {
+  .modal-header h2 {
     margin: 0;
     color: #333;
   }
   
-  .logout-btn {
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 30px;
+    cursor: pointer;
+    color: #666;
+    width: auto;
+    padding: 0;
+    line-height: 1;
+  }
+  
+  .close-btn:hover {
+    color: #333;
+  }
+  
+  .modal-body {
+    padding: 20px;
+    overflow-y: auto;
+  }
+  
+  /* Student Table */
+  .student-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .student-table th,
+  .student-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .student-table th {
+    background: #f8f9ff;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .student-table tr:hover {
+    background: #f8f9ff;
+  }
+
+  /* Drop Request Styles */
+.enrolled-course-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  
+  .request-drop-btn {
+    margin-top: 15px;
+    padding: 8px 16px;
+    background: #ffc107;
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+  }
+  
+  .request-drop-btn:hover {
+    background: #e0a800;
+  }
+  
+  .drop-info {
+    margin-top: 10px;
+    padding: 10px;
+    background: #fff3cd;
+    border-radius: 5px;
+    border-left: 3px solid #ffc107;
+  }
+  
+  .drop-info small {
+    color: #856404;
+    font-size: 13px;
+  }
+  
+  .status-drop-requested {
+    background: #fff3cd;
+    color: #856404;
+  }
+  
+  /* Drop Modal */
+  .drop-course-info {
+    background: #f8f9ff;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  
+  .drop-course-info h3 {
+    margin: 0 0 5px 0;
+    color: #333;
+    font-size: 18px;
+  }
+  
+  .drop-course-info p {
+    margin: 0;
+    color: #666;
+  }
+  
+  .form-group textarea {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #667eea;
+  }
+  
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+  }
+  
+  .cancel-btn {
+    padding: 10px 20px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 600;
+    width: auto;
+  }
+  
+  .cancel-btn:hover {
+    background: #5a6268;
+  }
+  
+  .submit-drop-btn {
     padding: 10px 20px;
     background: #dc3545;
     color: white;
@@ -29,62 +645,24 @@
     width: auto;
   }
   
-  .logout-btn:hover {
+  .submit-drop-btn:hover {
     background: #c82333;
   }
-  
-  .dashboard-content {
-    padding: 40px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-  
-  .welcome-card {
-    background: white;
+
+  .enrollment-closed-notice {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
     padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    margin-bottom: 30px;
+    text-align: center;
   }
   
-  .welcome-card h1 {
-    margin: 0 0 20px 0;
-    color: #333;
-  }
-  
-  .user-info p {
-    margin: 10px 0;
-    color: #666;
-    font-size: 16px;
-  }
-  
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-  }
-  
-  .dashboard-card {
-    background: white;
-    padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    cursor: pointer;
-    transition: transform 0.3s, box-shadow 0.3s;
-  }
-  
-  .dashboard-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-  
-  .dashboard-card h3 {
+  .enrollment-closed-notice h3 {
     margin: 0 0 10px 0;
-    color: #667eea;
-    font-size: 20px;
+    color: #856404;
   }
   
-  .dashboard-card p {
+  .enrollment-closed-notice p {
     margin: 0;
-    color: #666;
+    color: #856404;
   }

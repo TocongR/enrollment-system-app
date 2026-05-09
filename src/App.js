@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import Login from './components/Login';
 import StudentDashboard from './components/StudentDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import ProfessorDashboard from './components/ProfessorDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -11,10 +12,8 @@ function App() {
     <Router>
       <AuthProvider>
         <Routes>
-          {/* Login Page */}
           <Route path="/" element={<Login />} />
           
-          {/* Student Dashboard - Only accessible by students */}
           <Route 
             path="/student/dashboard" 
             element={
@@ -24,7 +23,6 @@ function App() {
             } 
           />
           
-          {/* Admin Dashboard - Only accessible by admins */}
           <Route 
             path="/admin/dashboard" 
             element={
@@ -34,7 +32,15 @@ function App() {
             } 
           />
 
-          {/* Redirect any unknown routes to login */}
+          <Route 
+            path="/professor/dashboard" 
+            element={
+              <ProtectedRoute allowedRoles={['professor']}>
+                <ProfessorDashboard />
+              </ProtectedRoute>
+            } 
+          />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
