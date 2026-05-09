@@ -1,7 +1,7 @@
 // src/components/AdminDashboard.jsx
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   doc,
   getDoc,
@@ -34,11 +34,7 @@ const AdminDashboard = () => {
 
   const currentSemester = "1st Sem 2024-2025";
 
-  useEffect(() => {
-    fetchData();
-  }, [currentUser]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (currentUser) {
       try {
         // Get admin user data
@@ -115,7 +111,13 @@ const AdminDashboard = () => {
 
       setLoading(false);
     }
-  };
+  }, [currentUser]);
+
+  
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
 
   const handleLogout = async () => {
     await logout();
