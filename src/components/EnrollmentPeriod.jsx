@@ -1,11 +1,9 @@
 // src/components/EnrollmentPeriod.jsx
 import { useState, useEffect } from 'react';
-import { 
-  collection, 
+import {  
   doc,
   getDoc,
   setDoc,
-  getDocs 
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import './EnrollmentPeriod.css';

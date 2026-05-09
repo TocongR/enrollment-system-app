@@ -6,7 +6,6 @@ import {
   where, 
   getDocs,
   doc,
-  updateDoc,
   deleteDoc
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';

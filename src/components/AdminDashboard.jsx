@@ -10,7 +10,6 @@ import {
   where,
   getDocs,
   updateDoc,
-  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
 import "./Dashboard.css";

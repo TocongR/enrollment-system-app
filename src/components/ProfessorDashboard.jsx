@@ -86,12 +86,12 @@ const ProfessorDashboard = () => {
     setSearchTerm('');
   };
 
-  const getTotalStudents = () => {
-    return myClasses.reduce((total, classItem) => {
-      // Count enrolled students for this class
-      return total + (classItem.enrolledCount || 0);
-    }, 0);
-  };
+//   const getTotalStudents = () => {
+//     return myClasses.reduce((total, classItem) => {
+//       // Count enrolled students for this class
+//       return total + (classItem.enrolledCount || 0);
+//     }, 0);
+//   };
 
   const getTotalUnits = () => {
     return myClasses.reduce((total, classItem) => total + classItem.units, 0);
