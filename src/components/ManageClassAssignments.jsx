@@ -20,45 +20,54 @@ const ManageClassAssignments = () => {
   const [selectedSection, setSelectedSection] = useState('A');
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedProfessor, setSelectedProfessor] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('1st Sem 2024-2025');
+  const [selectedSemester, setSelectedSemester] = useState('');
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
-  const [filterSemester, setFilterSemester] = useState('1st Sem 2024-2025');
+  const [filterSemester, setFilterSemester] = useState('');
   const [filterProgram, setFilterProgram] = useState('all');
   const [filterYear, setFilterYear] = useState('');
   const [filterSection, setFilterSection] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
-  const [availableSemesters, setAvailableSemesters] = useState([
-    '1st Sem 2024-2025', '2nd Sem 2024-2025',
-    '1st Sem 2025-2026', '2nd Sem 2025-2026'
-  ]);
+  const [availableSemesters, setAvailableSemesters] = useState([]);
 
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
-      const [progSnap, courseSnap, profSnap, assignSnap] = await Promise.all([
+      const [progSnap, courseSnap, profSnap, assignSnap, periodsSnap] = await Promise.all([
         getDocs(collection(db, 'programs')),
         getDocs(collection(db, 'courses')),
         getDocs(query(collection(db, 'users'), where('role', '==', 'professor'))),
         getDocs(collection(db, 'classAssignments')),
+        getDocs(collection(db, 'enrollmentPeriods')),
       ]);
       setPrograms(progSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setCourses(courseSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setProfessors(profSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       const assignments = assignSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       setClassAssignments(assignments);
-      const uniqueSems = new Set(assignments.map(a => a.semester));
-      setAvailableSemesters(prev => [...new Set([...prev, ...Array.from(uniqueSems)])]);
+
+      const sems = new Set();
+      periodsSnap.docs.forEach(d => sems.add(d.data().semester));
+      const semsArr = Array.from(sems).sort().reverse();
+      setAvailableSemesters(semsArr);
+      
+      if (semsArr.length > 0) {
+        if (!selectedSemester) setSelectedSemester(semsArr[0]);
+        if (!filterSemester) setFilterSemester(semsArr[0]);
+      }
     } catch (e) { console.error(e); }
   };
 
   const resetForm = () => {
     setSelectedProgram(''); setSelectedYear('1'); setSelectedSection('A');
-    setSelectedCourse(''); setSelectedProfessor(''); setSelectedSemester('1st Sem 2024-2025');
+    setSelectedCourse(''); setSelectedProfessor(''); 
+    if (availableSemesters.length > 0) {
+      setSelectedSemester(availableSemesters[0]);
+    }
     setEditingAssignment(null);
   };
 
@@ -192,8 +201,12 @@ const ManageClassAssignments = () => {
         <form onSubmit={isEdit ? handleUpdateAssignment : handleAddAssignment} className="px-6 py-5 space-y-4">
           <div>
             <label className={labelClass}>Semester *</label>
-            <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} className={selectClass} required>
-              {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
+            <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} className={selectClass} required disabled={availableSemesters.length === 0}>
+              {availableSemesters.length === 0 ? (
+                <option value="">No Enrollment Period yet</option>
+              ) : (
+                availableSemesters.map(s => <option key={s} value={s}>{s}</option>)
+              )}
             </select>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -275,8 +288,12 @@ const ManageClassAssignments = () => {
           <div>
             <label className={labelClass}>Semester</label>
             <select value={filterSemester} onChange={e => setFilterSemester(e.target.value)}
-              className={selectClass} style={{ width: 'auto', minWidth: '180px' }}>
-              {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
+              className={selectClass} style={{ width: 'auto', minWidth: '180px' }} disabled={availableSemesters.length === 0}>
+              {availableSemesters.length === 0 ? (
+                <option value="">No Enrollment Period yet</option>
+              ) : (
+                availableSemesters.map(s => <option key={s} value={s}>{s}</option>)
+              )}
             </select>
           </div>
           <div>

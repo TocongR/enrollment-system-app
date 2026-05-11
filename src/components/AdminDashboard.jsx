@@ -29,7 +29,7 @@ const AdminDashboard = () => {
   const [approvedEnrollments, setApprovedEnrollments] = useState([]);
   const [allStudents, setAllStudents] = useState([]);
   const [allCourses, setAllCourses] = useState([]);
-  const [selectedSemester, setSelectedSemester] = useState("1st Sem 2024-2025");
+  const [selectedSemester, setSelectedSemester] = useState("");
   const [selectedProgram, setSelectedProgram] = useState("all");
   const [availableSemesters, setAvailableSemesters] = useState([]);
   const [allPrograms, setAllPrograms] = useState([]);
@@ -50,29 +50,44 @@ const AdminDashboard = () => {
       const progSnap = await getDocs(collection(db, "programs"));
       setAllPrograms(progSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      const assignSnap = await getDocs(collection(db, "classAssignments"));
+      const periodsSnap = await getDocs(collection(db, "enrollmentPeriods"));
       const sems = new Set();
-      assignSnap.docs.forEach(d => sems.add(d.data().semester));
-      setAvailableSemesters(Array.from(sems).sort().reverse());
+      periodsSnap.docs.forEach(d => sems.add(d.data().semester));
+      const semsArr = Array.from(sems).sort().reverse();
+      setAvailableSemesters(semsArr);
 
-      const [pendingSnap, approvedSnap, dropSnap, studentsSnap, coursesSnap] = await Promise.all([
-        getDocs(query(collection(db, "enrollments"), where("status", "==", "pending"), where("semester", "==", selectedSemester))),
-        getDocs(query(collection(db, "enrollments"), where("status", "==", "enrolled"), where("semester", "==", selectedSemester))),
-        getDocs(query(collection(db, "enrollments"), where("status", "==", "drop-requested"), where("semester", "==", selectedSemester))),
-        getDocs(query(collection(db, "users"), where("role", "==", "student"))),
-        getDocs(query(collection(db, "classAssignments"), where("semester", "==", selectedSemester))),
-      ]);
+      let currentSem = selectedSemester;
+      if (!currentSem && semsArr.length > 0) {
+        currentSem = semsArr[0];
+        setSelectedSemester(currentSem);
+      }
 
-      setPendingEnrollments(pendingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setApprovedEnrollments(approvedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setDropRequests(dropSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllStudents(studentsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setAllCourses(coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      if (currentSem) {
+        const [pendingSnap, approvedSnap, dropSnap, studentsSnap, coursesSnap] = await Promise.all([
+          getDocs(query(collection(db, "enrollments"), where("status", "==", "pending"), where("semester", "==", currentSem))),
+          getDocs(query(collection(db, "enrollments"), where("status", "==", "enrolled"), where("semester", "==", currentSem))),
+          getDocs(query(collection(db, "enrollments"), where("status", "==", "drop-requested"), where("semester", "==", currentSem))),
+          getDocs(query(collection(db, "users"), where("role", "==", "student"))),
+          getDocs(query(collection(db, "classAssignments"), where("semester", "==", currentSem))),
+        ]);
+
+        setPendingEnrollments(pendingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setApprovedEnrollments(approvedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setDropRequests(dropSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setAllStudents(studentsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setAllCourses(coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } else {
+        setPendingEnrollments([]);
+        setApprovedEnrollments([]);
+        setDropRequests([]);
+        setAllStudents([]);
+        setAllCourses([]);
+      }
     } catch (e) { console.error(e); }
     setLoading(false);
   }, [currentUser, selectedSemester]);
 
-  useEffect(() => { if (currentUser && selectedSemester) fetchData(); }, [fetchData, selectedSemester, currentUser]);
+  useEffect(() => { if (currentUser) fetchData(); }, [fetchData, currentUser]);
 
   const handleLogout = async () => { await logout(); navigate("/"); };
 
@@ -228,8 +243,13 @@ const AdminDashboard = () => {
             </div>
             <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
               className="text-sm rounded-lg px-3 py-2 border-0 outline-none cursor-pointer font-medium"
-              style={{ background: "rgba(255,255,255,0.15)", color: "#fff" }}>
-              {availableSemesters.map(s => <option key={s} value={s} style={{ color: NAVY }}>{s}</option>)}
+              style={{ background: "rgba(255,255,255,0.15)", color: "#fff" }}
+              disabled={availableSemesters.length === 0}>
+              {availableSemesters.length === 0 ? (
+                <option value="" style={{ color: NAVY }}>No Enrollment Period yet</option>
+              ) : (
+                availableSemesters.map(s => <option key={s} value={s} style={{ color: NAVY }}>{s}</option>)
+              )}
             </select>
           </div>
         </div>

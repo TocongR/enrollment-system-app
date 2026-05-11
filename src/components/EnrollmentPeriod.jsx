@@ -29,13 +29,13 @@ const EnrollmentPeriod = () => {
   const [editingPeriod, setEditingPeriod] = useState(null);
   const [availableSemesters, setAvailableSemesters] = useState([]);
   const [formData, setFormData] = useState({
-    semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true
+    term: '', startYear: new Date().getFullYear(), endYear: new Date().getFullYear() + 1, startDate: '', endDate: '', isActive: true, autoToggle: true
   });
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
 
-  const emptyForm = { semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true };
+  const emptyForm = { term: '', startYear: new Date().getFullYear(), endYear: new Date().getFullYear() + 1, startDate: '', endDate: '', isActive: true, autoToggle: true };
 
   // Wrapped in useCallback so it has a stable reference for useEffect deps
   const fetchData = useCallback(async () => {
@@ -87,11 +87,18 @@ const EnrollmentPeriod = () => {
     e.preventDefault();
     setSaving(true);
     try {
+      if (Number(formData.endYear) !== Number(formData.startYear) + 1) {
+        setToast({ message: 'Academic years must be exactly 1 year apart (e.g., 2024-2025).', type: 'error' }); 
+        setSaving(false); return;
+      }
+      
+      const assembledSemester = `${formData.term} ${formData.startYear}-${formData.endYear}`;
+
       if (new Date(formData.startDate) > new Date(formData.endDate)) {
         alert('End date must be after start date'); setSaving(false); return;
       }
       const exists = enrollmentPeriods.some(p =>
-        p.semester === formData.semester && (!editingPeriod || p.id !== editingPeriod.id)
+        p.semester === assembledSemester && (!editingPeriod || p.id !== editingPeriod.id)
       );
       if (exists) {
         alert('An enrollment period already exists for this semester.'); setSaving(false); return;
@@ -102,7 +109,7 @@ const EnrollmentPeriod = () => {
         : formData.isActive;
 
       const data = {
-        semester: formData.semester, startDate: formData.startDate, endDate: formData.endDate,
+        semester: assembledSemester, startDate: formData.startDate, endDate: formData.endDate,
         autoToggle: formData.autoToggle, isActive: shouldBeActive, updatedAt: new Date()
       };
 
@@ -110,7 +117,7 @@ const EnrollmentPeriod = () => {
         await setDoc(doc(db, 'enrollmentPeriods', editingPeriod.id), { ...data, createdAt: editingPeriod.createdAt });
         setToast({ message: 'Enrollment period updated!', type: 'success' });
       } else {
-        await setDoc(doc(db, 'enrollmentPeriods', formData.semester.replace(/\s+/g, '-')), { ...data, createdAt: new Date() });
+        await setDoc(doc(db, 'enrollmentPeriods', assembledSemester.replace(/\s+/g, '-')), { ...data, createdAt: new Date() });
         setToast({ message: 'Enrollment period created!', type: 'success' });
         setShowCreateForm(false);
       }
@@ -122,7 +129,19 @@ const EnrollmentPeriod = () => {
 
   const handleEdit = (period) => {
     setEditingPeriod(period);
-    setFormData({ semester: period.semester, startDate: period.startDate, endDate: period.endDate, isActive: period.isActive, autoToggle: period.autoToggle });
+    
+    let term = '';
+    let startYear = new Date().getFullYear();
+    let endYear = new Date().getFullYear() + 1;
+    
+    const match = period.semester.match(/(.+) (\d{4})-(\d{4})/);
+    if (match) {
+      term = match[1];
+      startYear = parseInt(match[2]);
+      endYear = parseInt(match[3]);
+    }
+    
+    setFormData({ term, startYear, endYear, startDate: period.startDate, endDate: period.endDate, isActive: period.isActive, autoToggle: period.autoToggle });
     setShowCreateForm(true);
   };
 
@@ -236,13 +255,27 @@ const EnrollmentPeriod = () => {
             <button onClick={handleCancelEdit} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
           </div>
           <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
-            <div>
-              <label className={labelClass}>Semester *</label>
-              <select name="semester" value={formData.semester} onChange={handleInputChange}
-                className={inputClass} required disabled={!!editingPeriod}>
-                <option value="">Select Semester</option>
-                {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className={labelClass}>Semester *</label>
+                <select name="term" value={formData.term} onChange={handleInputChange}
+                  className={inputClass} required disabled={!!editingPeriod}>
+                  <option value="">Select Term</option>
+                  <option value="1st Sem">1st Sem</option>
+                  <option value="2nd Sem">2nd Sem</option>
+                  <option value="Summer">Summer</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Start Year *</label>
+                <input type="number" name="startYear" value={formData.startYear} onChange={handleInputChange}
+                  className={inputClass} required disabled={!!editingPeriod} min="2000" max="2100" />
+              </div>
+              <div>
+                <label className={labelClass}>End Year *</label>
+                <input type="number" name="endYear" value={formData.endYear} onChange={handleInputChange}
+                  className={inputClass} required disabled={!!editingPeriod} min="2000" max="2100" />
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
