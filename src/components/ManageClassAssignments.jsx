@@ -1,7 +1,7 @@
 // src/components/ManageClassAssignments.jsx
 import { useState, useEffect } from 'react';
 import {
-  collection, query, where, getDocs, addDoc, deleteDoc, doc
+  collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import ConfirmDialog from './ConfirmDialog';
@@ -22,7 +22,8 @@ const ManageClassAssignments = () => {
   const [selectedProfessor, setSelectedProfessor] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('1st Sem 2024-2025');
   const [loading, setLoading] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState(null);
   const [filterSemester, setFilterSemester] = useState('1st Sem 2024-2025');
   const [filterProgram, setFilterProgram] = useState('all');
   const [filterYear, setFilterYear] = useState('');
@@ -55,6 +56,12 @@ const ManageClassAssignments = () => {
     } catch (e) { console.error(e); }
   };
 
+  const resetForm = () => {
+    setSelectedProgram(''); setSelectedYear('1'); setSelectedSection('A');
+    setSelectedCourse(''); setSelectedProfessor(''); setSelectedSemester('1st Sem 2024-2025');
+    setEditingAssignment(null);
+  };
+
   const handleAddAssignment = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -64,7 +71,7 @@ const ManageClassAssignments = () => {
       const professor = professors.find(p => p.id === selectedProfessor);
 
       if (!program || !course || !professor) {
-        alert('Please select all fields'); setLoading(false); return;
+        setToast({ message: 'Please select all fields', type: 'error' }); setLoading(false); return;
       }
 
       const exists = classAssignments.some(a =>
@@ -72,7 +79,7 @@ const ManageClassAssignments = () => {
         a.section === selectedSection && a.courseId === course.id &&
         a.semester === selectedSemester
       );
-      if (exists) { alert('This assignment already exists!'); setLoading(false); return; }
+      if (exists) { setToast({ message: 'This assignment already exists!', type: 'error' }); setLoading(false); return; }
 
       await addDoc(collection(db, 'classAssignments'), {
         programId: program.code, programName: program.name,
@@ -84,9 +91,49 @@ const ManageClassAssignments = () => {
       });
 
       setToast({ message: `Class assignment created: ${course.code} for ${program.code}-${selectedYear}${selectedSection}`, type: 'success' });
-      setShowCreateForm(false);
-      fetchData(); setSelectedCourse(''); setSelectedProfessor('');
+      setShowCreateModal(false);
+      resetForm();
+      fetchData();
     } catch (e) { setToast({ message: 'Error creating assignment', type: 'error' }); }
+    setLoading(false);
+  };
+
+  const handleEditAssignment = (a) => {
+    setEditingAssignment(a);
+    setSelectedProgram(programs.find(p => p.code === a.programId)?.id || '');
+    setSelectedYear(String(a.yearLevel));
+    setSelectedSection(a.section);
+    setSelectedCourse(courses.find(c => c.id === a.courseId)?.id || '');
+    setSelectedProfessor(professors.find(p => p.studentId === a.professorId)?.id || '');
+    setSelectedSemester(a.semester);
+  };
+
+  const handleUpdateAssignment = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const program = programs.find(p => p.id === selectedProgram);
+      const course = courses.find(c => c.id === selectedCourse);
+      const professor = professors.find(p => p.id === selectedProfessor);
+
+      if (!program || !course || !professor) {
+        setToast({ message: 'Please select all fields', type: 'error' }); setLoading(false); return;
+      }
+
+      await updateDoc(doc(db, 'classAssignments', editingAssignment.id), {
+        programId: program.code, programName: program.name,
+        yearLevel: parseInt(selectedYear), section: selectedSection,
+        semester: selectedSemester, courseId: course.id,
+        courseCode: course.code, courseTitle: course.title, units: course.units,
+        professorId: professor.studentId, professorName: professor.fullName,
+        updatedAt: new Date()
+      });
+
+      setToast({ message: 'Assignment updated successfully!', type: 'success' });
+      setEditingAssignment(null);
+      resetForm();
+      fetchData();
+    } catch (e) { setToast({ message: 'Error updating assignment', type: 'error' }); }
     setLoading(false);
   };
 
@@ -132,104 +179,86 @@ const ManageClassAssignments = () => {
   const labelClass = "block text-xs font-medium text-gray-400 mb-1.5";
   const selectClass = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 text-gray-700";
 
-  return (
-    <div className="p-6 space-y-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-            Manage Class Assignments
+  const renderModal = (isEdit) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+            {isEdit ? 'Edit Class Assignment' : 'Create New Assignment'}
           </h2>
-          <p className="text-sm text-gray-400 mt-0.5">Assign professors to courses per semester</p>
+          <button onClick={() => { isEdit ? setEditingAssignment(null) : setShowCreateModal(false); resetForm(); }}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
-        <button
-          onClick={() => setShowCreateForm(v => !v)}
-          className="text-sm font-semibold px-5 py-2.5 rounded-full transition"
-          style={showCreateForm ? { background: "#f3f4f6", color: "#6b7280" } : { background: NAVY, color: "#fff" }}>
-          {showCreateForm ? '✕ Cancel' : '+ Add Class Assignment'}
-        </button>
-      </div>
-
-      {/* Create form */}
-      {showCreateForm && (
-      <div className="rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
-          <p className="text-sm font-semibold text-gray-600">Create New Assignment</p>
-        </div>
-        <form onSubmit={handleAddAssignment} className="p-5 space-y-5">
-
-          {/* Semester */}
+        <form onSubmit={isEdit ? handleUpdateAssignment : handleAddAssignment} className="px-6 py-5 space-y-4">
           <div>
             <label className={labelClass}>Semester *</label>
-            <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
-              className={selectClass} required>
+            <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} className={selectClass} required>
               {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-
-          {/* Program / Year / Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={labelClass}>Program *</label>
-              <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
-                className={selectClass} required>
-                <option value="">Select Program</option>
-                {programs.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+              <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)} className={selectClass} required>
+                <option value="">Select</option>
+                {programs.map(p => <option key={p.id} value={p.id}>{p.code}</option>)}
               </select>
             </div>
             <div>
-              <label className={labelClass}>Year Level *</label>
-              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
-                className={selectClass} required>
-                {["1","2","3","4"].map((y, i) => (
-                  <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>
-                ))}
+              <label className={labelClass}>Year *</label>
+              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className={selectClass} required>
+                {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]}</option>)}
               </select>
             </div>
             <div>
               <label className={labelClass}>Section *</label>
-              <select value={selectedSection} onChange={e => setSelectedSection(e.target.value)}
-                className={selectClass} required>
+              <select value={selectedSection} onChange={e => setSelectedSection(e.target.value)} className={selectClass} required>
                 {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
-
-          {/* Course / Professor */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Course *</label>
-              <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)}
-                className={selectClass} required>
-                <option value="">Select Course</option>
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>{c.code} — {c.title} ({c.units} units)</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Professor *</label>
-              <select value={selectedProfessor} onChange={e => setSelectedProfessor(e.target.value)}
-                className={selectClass} required>
-                <option value="">Select Professor</option>
-                {professors.map(p => (
-                  <option key={p.id} value={p.id}>{p.fullName} ({p.studentId})</option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className={labelClass}>Course *</label>
+            <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)} className={selectClass} required>
+              <option value="">Select Course</option>
+              {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.title} ({c.units} units)</option>)}
+            </select>
           </div>
-
-          <button type="submit" disabled={loading}
-            className="px-6 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50"
-            style={{ background: NAVY, color: "#fff" }}>
-            {loading ? 'Creating…' : 'Create Assignment'}
-          </button>
+          <div>
+            <label className={labelClass}>Professor *</label>
+            <select value={selectedProfessor} onChange={e => setSelectedProfessor(e.target.value)} className={selectClass} required>
+              <option value="">Select Professor</option>
+              {professors.map(p => <option key={p.id} value={p.id}>{p.fullName} ({p.studentId})</option>)}
+            </select>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => { isEdit ? setEditingAssignment(null) : setShowCreateModal(false); resetForm(); }}
+              className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+            <button type="submit" disabled={loading}
+              className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition disabled:opacity-50"
+              style={{ background: NAVY }}>{loading ? 'Saving…' : isEdit ? 'Update Assignment' : 'Create Assignment'}</button>
+          </div>
         </form>
       </div>
-      )}
+    </div>
+  );
 
-      {/* Filters for existing */}
+  return (
+    <div className="p-6 space-y-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>Manage Class Assignments</h2>
+          <p className="text-sm text-gray-400 mt-0.5">Assign professors to courses per semester</p>
+        </div>
+        <button onClick={() => setShowCreateModal(true)}
+          className="text-sm font-semibold px-5 py-2.5 rounded-full transition"
+          style={{ background: NAVY, color: "#fff" }}>
+          + Add Class Assignment
+        </button>
+      </div>
+
+      {/* Filters */}
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
           <p className="text-sm font-semibold text-gray-600">
@@ -269,9 +298,7 @@ const ManageClassAssignments = () => {
                     {["1","2","3","4"].map((y,i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]}</option>)}
                   </select>
                 </div>
-                {filterYear && (
-                  <button onClick={() => setFilterYear('')} className="text-gray-400 hover:text-gray-600 text-lg pb-2 ml-0.5">✕</button>
-                )}
+                {filterYear && <button onClick={() => setFilterYear('')} className="text-gray-400 hover:text-gray-600 text-lg pb-2 ml-0.5">✕</button>}
               </div>
               <div className="flex items-end gap-1">
                 <div>
@@ -282,18 +309,14 @@ const ManageClassAssignments = () => {
                     {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                {filterSection && (
-                  <button onClick={() => setFilterSection('')} className="text-gray-400 hover:text-gray-600 text-lg pb-2 ml-0.5">✕</button>
-                )}
+                {filterSection && <button onClick={() => setFilterSection('')} className="text-gray-400 hover:text-gray-600 text-lg pb-2 ml-0.5">✕</button>}
               </div>
             </>
           )}
           {(filterProgram !== 'all' || searchTerm) && (
             <button onClick={() => { setFilterProgram('all'); setFilterYear(''); setFilterSection(''); setSearchTerm(''); }}
               className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
-              style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
-              Clear All
-            </button>
+              style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear All</button>
           )}
         </div>
 
@@ -306,16 +329,10 @@ const ManageClassAssignments = () => {
           <div className="divide-y divide-gray-50">
             {Object.entries(getAssignmentsBySection()).map(([section, assignments]) => (
               <div key={section}>
-                {/* Section header */}
                 <div className="px-5 py-2.5 flex items-center gap-2" style={{ background: `${GOLD}18` }}>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full"
-                    style={{ background: GOLD, color: NAVY }}>
-                    {section}
-                  </span>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={{ background: GOLD, color: NAVY }}>{section}</span>
                   <span className="text-xs text-gray-400">{assignments.length} course{assignments.length !== 1 ? 's' : ''}</span>
                 </div>
-
-                {/* Assignments in section */}
                 <div className="divide-y divide-gray-50">
                   {assignments.map(a => (
                     <div key={a.id} className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors">
@@ -323,17 +340,18 @@ const ManageClassAssignments = () => {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm text-gray-900">{a.courseCode}</span>
                           <span className="text-sm text-gray-500 truncate">{a.courseTitle}</span>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                            {a.units} units
-                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{a.units} units</span>
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">{a.professorName}</p>
                       </div>
-                      <button onClick={() => handleDelete(a)}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-full shrink-0 transition"
-                        style={{ background: "#fee2e2", color: "#dc2626" }}>
-                        Delete
-                      </button>
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => handleEditAssignment(a)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
+                          style={{ borderColor: "#e5e7eb", color: "#374151" }}>Edit</button>
+                        <button onClick={() => handleDelete(a)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full shrink-0 transition"
+                          style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -342,6 +360,9 @@ const ManageClassAssignments = () => {
           </div>
         )}
       </div>
+
+      {showCreateModal && renderModal(false)}
+      {editingAssignment && renderModal(true)}
 
       <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
         danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}

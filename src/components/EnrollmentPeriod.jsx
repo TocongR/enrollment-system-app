@@ -225,79 +225,67 @@ const EnrollmentPeriod = () => {
           ))}
         </div>
       </div>
-
-      {/* Form */}
+      {/* Form Modal */}
       {showCreateForm && (
-      <div className="rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
-          <p className="text-sm font-semibold text-gray-600">
-            {editingPeriod ? `Editing: ${editingPeriod.semester}` : 'Create Enrollment Period'}
-          </p>
-        </div>
-        <form onSubmit={handleSave} className="p-5 space-y-5">
-
-          {/* Semester */}
-          <div>
-            <label className={labelClass}>Semester *</label>
-            <select name="semester" value={formData.semester} onChange={handleInputChange}
-              className={inputClass} required disabled={!!editingPeriod}>
-              <option value="">Select Semester</option>
-              {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+              {editingPeriod ? `Edit: ${editingPeriod.semester}` : 'Create Enrollment Period'}
+            </h2>
+            <button onClick={handleCancelEdit} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
           </div>
-
-          {/* Date range */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
             <div>
-              <label className={labelClass}>Start Date & Time *</label>
-              <input type="datetime-local" name="startDate" value={formData.startDate}
-                onChange={handleInputChange} className={inputClass} required />
+              <label className={labelClass}>Semester *</label>
+              <select name="semester" value={formData.semester} onChange={handleInputChange}
+                className={inputClass} required disabled={!!editingPeriod}>
+                <option value="">Select Semester</option>
+                {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
-            <div>
-              <label className={labelClass}>End Date & Time *</label>
-              <input type="datetime-local" name="endDate" value={formData.endDate}
-                onChange={handleInputChange} className={inputClass} required />
-            </div>
-          </div>
-
-          {/* Toggles */}
-          <div className="space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" name="autoToggle" checked={formData.autoToggle}
-                onChange={handleInputChange}
-                className="mt-0.5 w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm font-medium text-gray-700">Auto-toggle enrollment based on dates</p>
-                <p className="text-xs text-gray-400 mt-0.5">Automatically opens/closes when start/end dates are reached — recommended</p>
+                <label className={labelClass}>Start Date & Time *</label>
+                <input type="datetime-local" name="startDate" value={formData.startDate}
+                  onChange={handleInputChange} className={inputClass} required />
               </div>
-            </label>
-
-            {!formData.autoToggle && (
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" name="isActive" checked={formData.isActive}
+              <div>
+                <label className={labelClass}>End Date & Time *</label>
+                <input type="datetime-local" name="endDate" value={formData.endDate}
+                  onChange={handleInputChange} className={inputClass} required />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="autoToggle" checked={formData.autoToggle}
                   onChange={handleInputChange}
-                  className="w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
-                <p className="text-sm font-medium text-gray-700">Manually set as active now</p>
+                  className="mt-0.5 w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Auto-toggle enrollment based on dates</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Automatically opens/closes when start/end dates are reached — recommended</p>
+                </div>
               </label>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-1">
-            <button type="submit" disabled={saving}
-              className="px-6 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50"
-              style={{ background: NAVY, color: "#fff" }}>
-              {saving ? 'Saving…' : editingPeriod ? 'Update Period' : 'Create Period'}
-            </button>
-            {editingPeriod && (
+              {!formData.autoToggle && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" name="isActive" checked={formData.isActive}
+                    onChange={handleInputChange}
+                    className="w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+                  <p className="text-sm font-medium text-gray-700">Manually set as active now</p>
+                </label>
+              )}
+            </div>
+            <div className="flex gap-3 pt-1">
               <button type="button" onClick={handleCancelEdit}
-                className="px-6 py-2.5 rounded-full text-sm font-semibold border transition hover:bg-gray-50"
-                style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
-                Cancel
+                className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition disabled:opacity-50"
+                style={{ background: NAVY }}>
+                {saving ? 'Saving…' : editingPeriod ? 'Update Period' : 'Create Period'}
               </button>
-            )}
-          </div>
-        </form>
+            </div>
+          </form>
+        </div>
       </div>
       )}
 
@@ -337,7 +325,7 @@ const EnrollmentPeriod = () => {
                         <p>Start: {new Date(period.startDate).toLocaleString()}</p>
                         <p>End: {new Date(period.endDate).toLocaleString()}</p>
                         {period.lastAutoUpdate && (
-                          <p className="text-gray-300" style={{ opacity: 0.6 }}>
+                          <p className="text-gray-400">
                             Last auto-update: {new Date(period.lastAutoUpdate.seconds * 1000).toLocaleString()}
                           </p>
                         )}

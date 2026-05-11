@@ -4,12 +4,21 @@ import {
   collection, query, where, getDocs, doc, deleteDoc, setDoc, updateDoc
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../firebase/config';
+import { db } from '../firebase/config';
+import { secondaryAuth } from '../firebase/secondaryAuth';
 import ConfirmDialog from './ConfirmDialog';
 import Toast from './Toast';
 
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
+
+// Generate auto-password: firstname + middleinitial + lastname (lowercase, no spaces) + second code of student id
+const generatePassword = (firstName, middleInitial, lastName, studentId) => {
+  const namePart = `${firstName}${middleInitial}${lastName}`.replace(/\s+/g, '').toLowerCase();
+  const parts = studentId.split('-');
+  const codePart = parts.length >= 2 ? parts[1] : '';
+  return `${namePart}${codePart}`;
+};
 
 const ManageStudents = () => {
   const [students, setStudents] = useState([]);
@@ -18,15 +27,18 @@ const ManageStudents = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterProgram, setFilterProgram] = useState('');
   const [filterYear, setFilterYear] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [formData, setFormData] = useState({
-    studentId: '', fullName: '', password: '',
+    studentId: '', firstName: '', middleInitial: '', lastName: '',
     programId: '', yearLevel: '1', section: 'A'
   });
-  const [editData, setEditData] = useState({ fullName: '', programId: '', yearLevel: '1', section: 'A' });
+  const [editData, setEditData] = useState({
+    firstName: '', middleInitial: '', lastName: '',
+    programId: '', yearLevel: '1', section: 'A'
+  });
 
   useEffect(() => { fetchData(); }, []);
 
@@ -41,27 +53,35 @@ const ManageStudents = () => {
     } catch (e) { console.error(e); }
   };
 
-  const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const generatedPassword = generatePassword(
+    formData.firstName, formData.middleInitial, formData.lastName, formData.studentId
+  );
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
+    if (!generatedPassword || generatedPassword.length < 6) {
+      setToast({ message: 'Please fill in all name fields and student ID', type: 'error' });
+      return;
+    }
     setLoading(true);
     try {
       const program = programs.find(p => p.id === formData.programId);
-      if (!program) { alert('Please select a program'); setLoading(false); return; }
+      if (!program) { setToast({ message: 'Please select a program', type: 'error' }); setLoading(false); return; }
 
+      const fullName = `${formData.firstName} ${formData.middleInitial ? formData.middleInitial + '. ' : ''}${formData.lastName}`;
       const email = `${formData.studentId}@enrollment.system`;
-      const cred = await createUserWithEmailAndPassword(auth, email, formData.password);
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, email, generatedPassword);
 
       await setDoc(doc(db, 'users', cred.user.uid), {
-        studentId: formData.studentId, fullName: formData.fullName,
+        studentId: formData.studentId, fullName,
+        firstName: formData.firstName, middleInitial: formData.middleInitial, lastName: formData.lastName,
         role: 'student', programId: program.code, programName: program.name,
         yearLevel: parseInt(formData.yearLevel), section: formData.section,
         createdAt: new Date()
       });
 
-      setShowAddForm(false);
-      setFormData({ studentId: '', fullName: '', password: '', programId: '', yearLevel: '1', section: 'A' });
+      setShowAddModal(false);
+      setFormData({ studentId: '', firstName: '', middleInitial: '', lastName: '', programId: '', yearLevel: '1', section: 'A' });
       setToast({ message: 'Student added successfully!', type: 'success' });
       fetchData();
     } catch (e) { setToast({ message: `Error: ${e.message}`, type: 'error' }); }
@@ -71,7 +91,9 @@ const ManageStudents = () => {
   const handleEditStudent = (student) => {
     setEditingStudent(student);
     setEditData({
-      fullName: student.fullName,
+      firstName: student.firstName || student.fullName?.split(' ')[0] || '',
+      middleInitial: student.middleInitial || '',
+      lastName: student.lastName || student.fullName?.split(' ').slice(-1)[0] || '',
       programId: programs.find(p => p.code === student.programId)?.id || '',
       yearLevel: String(student.yearLevel),
       section: student.section
@@ -82,8 +104,10 @@ const ManageStudents = () => {
     e.preventDefault();
     try {
       const program = programs.find(p => p.id === editData.programId);
+      const fullName = `${editData.firstName} ${editData.middleInitial ? editData.middleInitial + '. ' : ''}${editData.lastName}`;
       await updateDoc(doc(db, 'users', editingStudent.id), {
-        fullName: editData.fullName,
+        fullName,
+        firstName: editData.firstName, middleInitial: editData.middleInitial, lastName: editData.lastName,
         programId: program ? program.code : editingStudent.programId,
         programName: program ? program.name : editingStudent.programName,
         yearLevel: parseInt(editData.yearLevel),
@@ -130,97 +154,25 @@ const ManageStudents = () => {
 
   return (
     <div className="p-6 space-y-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-            Manage Students
-          </h2>
+          <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>Manage Students</h2>
           <p className="text-sm text-gray-400 mt-0.5">Total: {students.length} students</p>
         </div>
-        <button
-          onClick={() => setShowAddForm(v => !v)}
+        <button onClick={() => setShowAddModal(true)}
           className="text-sm font-semibold px-5 py-2.5 rounded-full transition"
-          style={showAddForm
-            ? { background: "#f3f4f6", color: "#6b7280" }
-            : { background: NAVY, color: "#fff" }}>
-          {showAddForm ? '✕ Cancel' : '+ Add New Student'}
+          style={{ background: NAVY, color: "#fff" }}>
+          + Add New Student
         </button>
       </div>
-
-      {/* Add Student Form */}
-      {showAddForm && (
-        <div className="rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
-            <p className="text-sm font-semibold text-gray-600">Add New Student</p>
-          </div>
-          <form onSubmit={handleAddStudent} className="p-5 space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className={labelClass}>Student ID *</label>
-                <input type="text" name="studentId" value={formData.studentId}
-                  onChange={handleInputChange} className={inputClass}
-                  placeholder="e.g. 2024-1234-A" required />
-              </div>
-              <div>
-                <label className={labelClass}>Full Name *</label>
-                <input type="text" name="fullName" value={formData.fullName}
-                  onChange={handleInputChange} className={inputClass}
-                  placeholder="e.g. Juan Dela Cruz" required />
-              </div>
-              <div>
-                <label className={labelClass}>Initial Password *</label>
-                <input type="password" name="password" value={formData.password}
-                  onChange={handleInputChange} className={inputClass}
-                  placeholder="Set initial password" required />
-              </div>
-              <div>
-                <label className={labelClass}>Program *</label>
-                <select name="programId" value={formData.programId}
-                  onChange={handleInputChange} className={inputClass} required>
-                  <option value="">Select Program</option>
-                  {programs.map(p => (
-                    <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Year Level *</label>
-                <select name="yearLevel" value={formData.yearLevel}
-                  onChange={handleInputChange} className={inputClass} required>
-                  {["1","2","3","4"].map((y, i) => (
-                    <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Section *</label>
-                <select name="section" value={formData.section}
-                  onChange={handleInputChange} className={inputClass} required>
-                  {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
-            <button type="submit" disabled={loading}
-              className="px-6 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50"
-              style={{ background: NAVY, color: "#fff" }}>
-              {loading ? 'Adding student…' : 'Add Student'}
-            </button>
-          </form>
-        </div>
-      )}
 
       {/* Filters */}
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 flex flex-wrap gap-3 items-center">
-          <input
-            type="text"
-            placeholder="Search by ID or name…"
-            value={searchTerm}
+          <input type="text" placeholder="Search by ID or name…" value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2"
-          />
+            className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2" />
           <select value={filterProgram} onChange={e => setFilterProgram(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none text-gray-600">
             <option value="">All Programs</option>
@@ -229,16 +181,12 @@ const ManageStudents = () => {
           <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none text-gray-600">
             <option value="">All Years</option>
-            {["1","2","3","4"].map((y, i) => (
-              <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>
-            ))}
+            {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>)}
           </select>
           {hasFilters && (
             <button onClick={() => { setSearchTerm(''); setFilterProgram(''); setFilterYear(''); }}
               className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
-              style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
-              Clear
-            </button>
+              style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear</button>
           )}
         </div>
 
@@ -247,7 +195,6 @@ const ManageStudents = () => {
           <p className="px-5 py-2 text-xs text-gray-400 border-b border-gray-50">
             Showing {filtered.length} of {students.length} students
           </p>
-
           {filtered.length === 0 ? (
             <div className="px-6 py-10 text-center text-gray-400 text-sm">No students found.</div>
           ) : (
@@ -266,31 +213,20 @@ const ManageStudents = () => {
                       <td className={tdClass + " font-medium"}>{s.studentId}</td>
                       <td className={tdClass}>{s.fullName}</td>
                       <td className={tdClass}>
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                          style={{ background: `${GOLD}33`, color: NAVY }}>
-                          {s.programId}
-                        </span>
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: `${GOLD}33`, color: NAVY }}>{s.programId}</span>
                         <span className="ml-2 text-xs text-gray-400">{s.programName}</span>
                       </td>
                       <td className={tdClass}>
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-                          {s.yearLevel}{s.section}
-                        </span>
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">{s.yearLevel}{s.section}</span>
                       </td>
                       <td className={tdClass}>
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditStudent(s)}
+                          <button onClick={() => handleEditStudent(s)}
                             className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
-                            style={{ borderColor: "#e5e7eb", color: "#374151" }}>
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteStudent(s.studentId, s.id)}
+                            style={{ borderColor: "#e5e7eb", color: "#374151" }}>Edit</button>
+                          <button onClick={() => handleDeleteStudent(s.studentId, s.id)}
                             className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
-                            style={{ background: "#fee2e2", color: "#dc2626" }}>
-                            Delete
-                          </button>
+                            style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
                         </div>
                       </td>
                     </tr>
@@ -302,10 +238,83 @@ const ManageStudents = () => {
         </div>
       </div>
 
+      {/* Add Student Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>Add New Student</h2>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+            <form onSubmit={handleAddStudent} className="px-6 py-5 space-y-4">
+              <div>
+                <label className={labelClass}>Student ID *</label>
+                <input type="text" value={formData.studentId} onChange={e => setFormData(p => ({ ...p, studentId: e.target.value.toUpperCase() }))}
+                  className={inputClass} placeholder="e.g. 2024-1234-A" required />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className={labelClass}>First Name *</label>
+                  <input type="text" value={formData.firstName} onChange={e => setFormData(p => ({ ...p, firstName: e.target.value }))}
+                    className={inputClass} placeholder="Juan" required />
+                </div>
+                <div>
+                  <label className={labelClass}>Middle Initial</label>
+                  <input type="text" value={formData.middleInitial} onChange={e => setFormData(p => ({ ...p, middleInitial: e.target.value.slice(0, 2) }))}
+                    className={inputClass} placeholder="M" maxLength={2} />
+                </div>
+                <div>
+                  <label className={labelClass}>Last Name *</label>
+                  <input type="text" value={formData.lastName} onChange={e => setFormData(p => ({ ...p, lastName: e.target.value }))}
+                    className={inputClass} placeholder="Dela Cruz" required />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Initial Password (auto-generated)</label>
+                <input type="text" value={generatedPassword} disabled
+                  className={inputClass + " bg-gray-50 text-gray-500 font-mono"} />
+                <p className="text-xs text-gray-400 mt-1">Format: firstname + middleinitial + lastname + studentid-code (all lowercase)</p>
+              </div>
+              <div>
+                <label className={labelClass}>Program *</label>
+                <select value={formData.programId} onChange={e => setFormData(p => ({ ...p, programId: e.target.value }))}
+                  className={inputClass} required>
+                  <option value="">Select Program</option>
+                  {programs.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Year Level *</label>
+                  <select value={formData.yearLevel} onChange={e => setFormData(p => ({ ...p, yearLevel: e.target.value }))}
+                    className={inputClass} required>
+                    {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Section *</label>
+                  <select value={formData.section} onChange={e => setFormData(p => ({ ...p, section: e.target.value }))}
+                    className={inputClass} required>
+                    {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+                <button type="submit" disabled={loading}
+                  className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition disabled:opacity-50"
+                  style={{ background: NAVY }}>{loading ? 'Adding…' : 'Add Student'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Edit Student Modal */}
       {editingStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-dialogIn">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>Edit Student</h2>
               <button onClick={() => setEditingStudent(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
@@ -315,9 +324,22 @@ const ManageStudents = () => {
                 <label className={labelClass}>Student ID</label>
                 <input type="text" value={editingStudent.studentId} disabled className={inputClass + " bg-gray-50"} />
               </div>
-              <div>
-                <label className={labelClass}>Full Name *</label>
-                <input type="text" value={editData.fullName} onChange={e => setEditData(p => ({ ...p, fullName: e.target.value }))} className={inputClass} required />
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className={labelClass}>First Name *</label>
+                  <input type="text" value={editData.firstName} onChange={e => setEditData(p => ({ ...p, firstName: e.target.value }))}
+                    className={inputClass} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Middle Initial</label>
+                  <input type="text" value={editData.middleInitial} onChange={e => setEditData(p => ({ ...p, middleInitial: e.target.value.slice(0, 2) }))}
+                    className={inputClass} maxLength={2} />
+                </div>
+                <div>
+                  <label className={labelClass}>Last Name *</label>
+                  <input type="text" value={editData.lastName} onChange={e => setEditData(p => ({ ...p, lastName: e.target.value }))}
+                    className={inputClass} required />
+                </div>
               </div>
               <div>
                 <label className={labelClass}>Program *</label>

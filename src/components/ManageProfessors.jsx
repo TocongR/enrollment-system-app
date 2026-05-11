@@ -2,21 +2,30 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../firebase/config';
+import { db } from '../firebase/config';
+import { secondaryAuth } from '../firebase/secondaryAuth';
 import ConfirmDialog from './ConfirmDialog';
 import Toast from './Toast';
 
 const NAVY = "#1a3a6b";
 
+// Auto-password: fullname lowercase no spaces + number code from PROF-XXX
+const generateProfPassword = (fullName, professorId) => {
+  const namePart = fullName.replace(/\s+/g, '').toLowerCase();
+  const parts = professorId.split('-');
+  const codePart = parts.length >= 2 ? parts[1] : '';
+  return `${namePart}${codePart}`;
+};
+
 const ManageProfessors = () => {
   const [professors, setProfessors] = useState([]);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [editingProf, setEditingProf] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
-  const [formData, setFormData] = useState({ professorId: '', fullName: '', password: '' });
+  const [formData, setFormData] = useState({ professorId: '', fullName: '' });
 
   useEffect(() => { fetchProfessors(); }, []);
 
@@ -27,19 +36,25 @@ const ManageProfessors = () => {
     } catch (e) { console.error(e); }
   };
 
+  const generatedPassword = generateProfPassword(formData.fullName, formData.professorId);
+
   const handleAdd = async (e) => {
     e.preventDefault();
+    if (!generatedPassword || generatedPassword.length < 6) {
+      setToast({ message: 'Please fill in the full name and professor ID', type: 'error' });
+      return;
+    }
     setLoading(true);
     try {
       const email = `${formData.professorId}@enrollment.system`;
-      const cred = await createUserWithEmailAndPassword(auth, email, formData.password);
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, email, generatedPassword);
       await setDoc(doc(db, 'users', cred.user.uid), {
         studentId: formData.professorId, fullName: formData.fullName,
         role: 'professor', createdAt: new Date()
       });
       setToast({ message: `Professor ${formData.professorId} created successfully!`, type: 'success' });
-      setShowAddForm(false);
-      setFormData({ professorId: '', fullName: '', password: '' });
+      setShowAddModal(false);
+      setFormData({ professorId: '', fullName: '' });
       fetchProfessors();
     } catch (e) { setToast({ message: `Error: ${e.message}`, type: 'error' }); }
     setLoading(false);
@@ -47,8 +62,7 @@ const ManageProfessors = () => {
 
   const handleEdit = (prof) => {
     setEditingProf(prof);
-    setFormData({ professorId: prof.studentId, fullName: prof.fullName, password: '' });
-    setShowAddForm(true);
+    setFormData({ professorId: prof.studentId, fullName: prof.fullName });
   };
 
   const handleUpdate = async (e) => {
@@ -57,8 +71,7 @@ const ManageProfessors = () => {
       await updateDoc(doc(db, 'users', editingProf.id), { fullName: formData.fullName });
       setToast({ message: 'Professor updated!', type: 'success' });
       setEditingProf(null);
-      setShowAddForm(false);
-      setFormData({ professorId: '', fullName: '', password: '' });
+      setFormData({ professorId: '', fullName: '' });
       fetchProfessors();
     } catch (e) { setToast({ message: 'Error updating', type: 'error' }); }
   };
@@ -86,6 +99,50 @@ const ManageProfessors = () => {
   const labelClass = "block text-xs font-medium text-gray-400 mb-1.5";
   const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 text-gray-700";
 
+  // Shared modal content for Add/Edit
+  const renderModal = (isEdit) => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-dialogIn">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+            {isEdit ? 'Edit Professor' : 'Add New Professor'}
+          </h2>
+          <button onClick={() => { isEdit ? setEditingProf(null) : setShowAddModal(false); setFormData({ professorId: '', fullName: '' }); }}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+        <form onSubmit={isEdit ? handleUpdate : handleAdd} className="px-6 py-5 space-y-4">
+          <div>
+            <label className={labelClass}>Professor ID *</label>
+            <input type="text" value={formData.professorId}
+              onChange={e => setFormData(p => ({ ...p, professorId: e.target.value.toUpperCase() }))}
+              className={inputClass} placeholder="e.g. PROF-003" required disabled={isEdit} />
+          </div>
+          <div>
+            <label className={labelClass}>Full Name *</label>
+            <input type="text" value={formData.fullName}
+              onChange={e => setFormData(p => ({ ...p, fullName: e.target.value }))}
+              className={inputClass} placeholder="e.g. Mario Esperanza" required />
+          </div>
+          {!isEdit && (
+            <div>
+              <label className={labelClass}>Initial Password (auto-generated)</label>
+              <input type="text" value={generatedPassword} disabled
+                className={inputClass + " bg-gray-50 text-gray-500 font-mono"} />
+              <p className="text-xs text-gray-400 mt-1">Format: fullname (lowercase, no spaces) + number code</p>
+            </div>
+          )}
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => { isEdit ? setEditingProf(null) : setShowAddModal(false); setFormData({ professorId: '', fullName: '' }); }}
+              className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+            <button type="submit" disabled={loading}
+              className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition disabled:opacity-50"
+              style={{ background: NAVY }}>{loading ? 'Saving…' : isEdit ? 'Update Professor' : 'Add Professor'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-6 space-y-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -93,49 +150,12 @@ const ManageProfessors = () => {
           <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>Manage Professors</h2>
           <p className="text-sm text-gray-400 mt-0.5">Total: {professors.length} professors</p>
         </div>
-        <button onClick={() => { setShowAddForm(v => !v); if (showAddForm) { setEditingProf(null); setFormData({ professorId: '', fullName: '', password: '' }); } }}
+        <button onClick={() => setShowAddModal(true)}
           className="text-sm font-semibold px-5 py-2.5 rounded-full transition"
-          style={showAddForm ? { background: "#f3f4f6", color: "#6b7280" } : { background: NAVY, color: "#fff" }}>
-          {showAddForm ? '✕ Cancel' : '+ Add New Professor'}
+          style={{ background: NAVY, color: "#fff" }}>
+          + Add New Professor
         </button>
       </div>
-
-      {showAddForm && (
-        <div className="rounded-2xl border border-gray-100 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
-            <p className="text-sm font-semibold text-gray-600">{editingProf ? `Editing: ${editingProf.studentId}` : 'Add New Professor'}</p>
-          </div>
-          <form onSubmit={editingProf ? handleUpdate : handleAdd} className="p-5 space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className={labelClass}>Professor ID *</label>
-                <input type="text" value={formData.professorId}
-                  onChange={e => setFormData(p => ({ ...p, professorId: e.target.value.toUpperCase() }))}
-                  className={inputClass} placeholder="e.g. PROF-003" required disabled={!!editingProf} />
-              </div>
-              <div>
-                <label className={labelClass}>Full Name *</label>
-                <input type="text" value={formData.fullName}
-                  onChange={e => setFormData(p => ({ ...p, fullName: e.target.value }))}
-                  className={inputClass} placeholder="e.g. Dr. Juan Dela Cruz" required />
-              </div>
-              {!editingProf && (
-                <div>
-                  <label className={labelClass}>Initial Password *</label>
-                  <input type="password" value={formData.password}
-                    onChange={e => setFormData(p => ({ ...p, password: e.target.value }))}
-                    className={inputClass} placeholder="Set initial password" required />
-                </div>
-              )}
-            </div>
-            <button type="submit" disabled={loading}
-              className="px-6 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50"
-              style={{ background: NAVY, color: "#fff" }}>
-              {loading ? 'Saving...' : editingProf ? 'Update Professor' : 'Add Professor'}
-            </button>
-          </form>
-        </div>
-      )}
 
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 flex flex-wrap gap-3 items-center">
@@ -187,6 +207,9 @@ const ManageProfessors = () => {
           )}
         </div>
       </div>
+
+      {showAddModal && renderModal(false)}
+      {editingProf && renderModal(true)}
 
       <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
         danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}

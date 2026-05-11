@@ -37,6 +37,9 @@ const AdminDashboard = () => {
   const [sortConfig, setSortConfig] = useState({ key: null, dir: 'asc' });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [toast, setToast] = useState(null);
+  const [approvedFilterYear, setApprovedFilterYear] = useState('');
+  const [approvedFilterSection, setApprovedFilterSection] = useState('');
+  const [approvedSearch, setApprovedSearch] = useState('');
 
   const fetchData = useCallback(async () => {
     if (!currentUser) return;
@@ -115,14 +118,8 @@ const AdminDashboard = () => {
   const filteredApproved = filterByProgram(approvedEnrollments);
   const filteredDrops = filterByProgram(dropRequests);
 
-  const getEnrollmentsByCourse = () => {
-    const map = {};
-    approvedEnrollments.forEach(e => {
-      if (!map[e.courseCode]) map[e.courseCode] = { courseCode: e.courseCode, courseTitle: e.courseTitle, count: 0 };
-      map[e.courseCode].count++;
-    });
-    return Object.values(map).sort((a, b) => b.count - a.count);
-  };
+
+
 
   const sortList = (list) => {
     if (!sortConfig.key) return list;
@@ -138,15 +135,15 @@ const AdminDashboard = () => {
   const sortIcon = (key) => sortConfig.key === key ? (sortConfig.dir === 'asc' ? ' ▲' : ' ▼') : '';
 
   const tabs = [
-    { key: "dashboard",    label: "Dashboard", icon: "⌂" },
-    { key: "pending",      label: `Pending (${filteredPending.length})`, icon: "⏳" },
-    { key: "drop-requests",label: `Drop Requests (${filteredDrops.length})`, icon: "↓" },
-    { key: "approved",     label: `Approved (${filteredApproved.length})`, icon: "✓" },
-    { key: "assignments",  label: "Manage Classes", icon: "▦" },
-    { key: "students",     label: "Manage Students", icon: "☺" },
-    { key: "courses",      label: "Manage Courses", icon: "○" },
-    { key: "professors",   label: "Manage Professors", icon: "★" },
-    { key: "period",       label: "Enrollment Period", icon: "☈" },
+    { key: "dashboard",    label: "Dashboard", icon: "📊" },
+    { key: "pending",      label: `Pending Enrollment (${filteredPending.length})`, icon: "📋" },
+    { key: "drop-requests",label: `Drop Requests (${filteredDrops.length})`, icon: "📋" },
+    { key: "approved",     label: `Approved (${filteredApproved.length})`, icon: "📋" },
+    { key: "assignments",  label: "Manage Classes", icon: "📚" },
+    { key: "students",     label: "Manage Students", icon: "👤" },
+    { key: "courses",      label: "Manage Courses", icon: "📖" },
+    { key: "professors",   label: "Manage Professors", icon: "🎓" },
+    { key: "period",       label: "Enrollment Period", icon: "📅" },
   ];
 
   const stats = [
@@ -205,8 +202,8 @@ const AdminDashboard = () => {
             <button key={t.key} onClick={() => { setActiveTab(t.key); setSidebarOpen(false); }}
               className="w-full text-left px-5 py-3 text-sm font-medium transition flex items-center gap-3"
               style={activeTab === t.key
-                ? { background: 'rgba(255,255,255,0.12)', color: '#fff' }
-                : { color: 'rgba(255,255,255,0.6)' }}>
+                ? { background: 'rgba(255,255,255,0.15)', color: '#ffffff' }
+                : { color: '#ffffff' }}>
               <span className="text-base">{t.icon}</span>
               {t.label}
             </button>
@@ -254,31 +251,6 @@ const AdminDashboard = () => {
                   <p className="text-xs text-gray-400 mt-1">{s.label}</p>
                 </div>
               ))}
-            </div>
-
-            {/* Course Overview */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100">
-                <p className="text-sm font-semibold text-gray-500">Course Overview — {selectedSemester}</p>
-              </div>
-              {getEnrollmentsByCourse().length === 0 ? (
-                <div className="px-6 py-10 text-center text-gray-400 text-sm">No enrollments yet.</div>
-              ) : (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
-                  {getEnrollmentsByCourse().map((course, i) => (
-                    <div key={i} className="rounded-xl border border-gray-100 overflow-hidden">
-                      <div className="px-4 py-3 border-b border-gray-50" style={{ background: `${NAVY}08` }}>
-                        <span className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>{course.courseCode}</span>
-                        <p className="text-xs text-gray-400 mt-0.5">{course.courseTitle}</p>
-                      </div>
-                      <div className="px-4 py-3 flex items-center gap-3">
-                        <span className="text-3xl font-bold" style={{ color: NAVY, fontFamily: "'Sora', sans-serif" }}>{course.count}</span>
-                        <span className="text-sm text-gray-400">students</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -423,9 +395,23 @@ const AdminDashboard = () => {
         )}
 
         {/* ── APPROVED TAB ── */}
-        {activeTab === "approved" && (
+        {activeTab === "approved" && (() => {
+          let list = filteredApproved;
+          if (approvedFilterYear) list = list.filter(e => String(e.yearLevel) === approvedFilterYear);
+          if (approvedFilterSection) list = list.filter(e => e.section === approvedFilterSection);
+          if (approvedSearch) {
+            const t = approvedSearch.toLowerCase();
+            list = list.filter(e => e.studentId?.toLowerCase().includes(t) || e.studentName?.toLowerCase().includes(t));
+          }
+          return (
           <div className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400 font-medium">Search</label>
+                <input type="text" placeholder="Student ID or name..." value={approvedSearch}
+                  onChange={e => setApprovedSearch(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ minWidth: '180px' }} />
+              </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400 font-medium">Program</label>
                 <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
@@ -434,14 +420,39 @@ const AdminDashboard = () => {
                   {allPrograms.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
                 </select>
               </div>
-              {selectedProgram !== "all" && <button onClick={() => setSelectedProgram("all")} className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50" style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear</button>}
+              {selectedProgram !== "all" && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-400 font-medium">Year</label>
+                    <select value={approvedFilterYear} onChange={e => setApprovedFilterYear(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                      <option value="">All Years</option>
+                      {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-400 font-medium">Section</label>
+                    <select value={approvedFilterSection} onChange={e => setApprovedFilterSection(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                      <option value="">All Sections</option>
+                      {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
+              {(selectedProgram !== "all" || approvedSearch || approvedFilterYear || approvedFilterSection) && (
+                <button onClick={() => { setSelectedProgram("all"); setApprovedFilterYear(''); setApprovedFilterSection(''); setApprovedSearch(''); }}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
+                  style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear All</button>
+              )}
             </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
               <p className="text-sm font-semibold text-gray-500">Approved Enrollments</p>
+              <p className="text-xs text-gray-400">{list.length} results</p>
             </div>
-            {filteredApproved.length === 0 ? (
-              <div className="px-6 py-10 text-center text-gray-400 text-sm">No approved enrollments yet.</div>
+            {list.length === 0 ? (
+              <div className="px-6 py-10 text-center text-gray-400 text-sm">No approved enrollments found.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -453,7 +464,7 @@ const AdminDashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {sortList(filteredApproved).map(e => (
+                    {sortList(list).map(e => (
                       <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className={tdClass}>{e.studentId}</td>
                         <td className={tdClass + " font-medium"}>{e.studentName}</td>
@@ -469,9 +480,7 @@ const AdminDashboard = () => {
                         <td className={tdClass}>
                           <button onClick={() => dropEnrollment(e.id)}
                             className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-red-50"
-                            style={{ borderColor: "#fca5a5", color: "#dc2626" }}>
-                            Drop
-                          </button>
+                            style={{ borderColor: "#fca5a5", color: "#dc2626" }}>Drop</button>
                         </td>
                       </tr>
                     ))}
@@ -481,7 +490,8 @@ const AdminDashboard = () => {
             )}
           </div>
           </div>
-        )}
+          );
+        })()}
 
         {activeTab === "assignments" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

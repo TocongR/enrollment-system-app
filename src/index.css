@@ -50,17 +50,3 @@ code {
   animation: dialogIn 0.2s ease-out;
 }
 
-/* Fade gradient for enrollment period details */
-.fade-bottom {
-  position: relative;
-}
-.fade-bottom::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 32px;
-  background: linear-gradient(to bottom, transparent, white);
-  pointer-events: none;
-}
