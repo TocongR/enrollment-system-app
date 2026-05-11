@@ -4,6 +4,8 @@ import {
   collection, query, where, getDocs, addDoc, deleteDoc, doc
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import ConfirmDialog from './ConfirmDialog';
+import Toast from './Toast';
 
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
@@ -20,8 +22,14 @@ const ManageClassAssignments = () => {
   const [selectedProfessor, setSelectedProfessor] = useState('');
   const [selectedSemester, setSelectedSemester] = useState('1st Sem 2024-2025');
   const [loading, setLoading] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [filterSemester, setFilterSemester] = useState('1st Sem 2024-2025');
   const [filterProgram, setFilterProgram] = useState('all');
+  const [filterYear, setFilterYear] = useState('');
+  const [filterSection, setFilterSection] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [availableSemesters, setAvailableSemesters] = useState([
     '1st Sem 2024-2025', '2nd Sem 2024-2025',
     '1st Sem 2025-2026', '2nd Sem 2025-2026'
@@ -75,22 +83,41 @@ const ManageClassAssignments = () => {
         status: 'active', createdAt: new Date()
       });
 
+      setToast({ message: `Class assignment created: ${course.code} for ${program.code}-${selectedYear}${selectedSection}`, type: 'success' });
+      setShowCreateForm(false);
       fetchData(); setSelectedCourse(''); setSelectedProfessor('');
-    } catch (e) { alert('Error creating assignment'); }
+    } catch (e) { setToast({ message: 'Error creating assignment', type: 'error' }); }
     setLoading(false);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this assignment? This will affect student enrollments.')) return;
-    try {
-      await deleteDoc(doc(db, 'classAssignments', id));
-      fetchData();
-    } catch (e) { alert('Error deleting assignment'); }
+  const handleDelete = (a) => {
+    setConfirmDialog({
+      isOpen: true, title: 'Delete Assignment', danger: true,
+      message: `Delete ${a.courseCode} for ${a.programId}-${a.yearLevel}${a.section}? This will affect student enrollments.`,
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          await deleteDoc(doc(db, 'classAssignments', a.id));
+          setToast({ message: 'Assignment deleted', type: 'success' });
+          fetchData();
+        } catch (e) { setToast({ message: 'Error deleting assignment', type: 'error' }); }
+      }
+    });
   };
 
-  const getFilteredAssignments = () => classAssignments.filter(a =>
-    a.semester === filterSemester && (filterProgram === 'all' || a.programId === filterProgram)
-  );
+  const getFilteredAssignments = () => classAssignments.filter(a => {
+    if (a.semester !== filterSemester) return false;
+    if (filterProgram !== 'all' && a.programId !== filterProgram) return false;
+    if (filterYear && a.yearLevel !== parseInt(filterYear)) return false;
+    if (filterSection && a.section !== filterSection) return false;
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      if (!a.professorName?.toLowerCase().includes(term) &&
+          !a.courseCode?.toLowerCase().includes(term) &&
+          !a.courseTitle?.toLowerCase().includes(term)) return false;
+    }
+    return true;
+  });
 
   const getAssignmentsBySection = () => {
     const grouped = {};
@@ -109,14 +136,23 @@ const ManageClassAssignments = () => {
     <div className="p-6 space-y-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-          Manage Class Assignments
-        </h2>
-        <p className="text-sm text-gray-400 mt-0.5">Assign professors to courses per semester</p>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+            Manage Class Assignments
+          </h2>
+          <p className="text-sm text-gray-400 mt-0.5">Assign professors to courses per semester</p>
+        </div>
+        <button
+          onClick={() => setShowCreateForm(v => !v)}
+          className="text-sm font-semibold px-5 py-2.5 rounded-full transition"
+          style={showCreateForm ? { background: "#f3f4f6", color: "#6b7280" } : { background: NAVY, color: "#fff" }}>
+          {showCreateForm ? '✕ Cancel' : '+ Add Class Assignment'}
+        </button>
       </div>
 
       {/* Create form */}
+      {showCreateForm && (
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
           <p className="text-sm font-semibold text-gray-600">Create New Assignment</p>
@@ -191,6 +227,7 @@ const ManageClassAssignments = () => {
           </button>
         </form>
       </div>
+      )}
 
       {/* Filters for existing */}
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
@@ -201,6 +238,12 @@ const ManageClassAssignments = () => {
         </div>
         <div className="px-5 py-4 flex flex-wrap gap-4 items-end border-b border-gray-50">
           <div>
+            <label className={labelClass}>Search</label>
+            <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Professor name or course code..."
+              className={selectClass} style={{ width: 'auto', minWidth: '220px' }} />
+          </div>
+          <div>
             <label className={labelClass}>Semester</label>
             <select value={filterSemester} onChange={e => setFilterSemester(e.target.value)}
               className={selectClass} style={{ width: 'auto', minWidth: '180px' }}>
@@ -209,17 +252,47 @@ const ManageClassAssignments = () => {
           </div>
           <div>
             <label className={labelClass}>Program</label>
-            <select value={filterProgram} onChange={e => setFilterProgram(e.target.value)}
+            <select value={filterProgram} onChange={e => { setFilterProgram(e.target.value); if (e.target.value === 'all') { setFilterYear(''); setFilterSection(''); } }}
               className={selectClass} style={{ width: 'auto', minWidth: '160px' }}>
               <option value="all">All Programs</option>
               {programs.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
             </select>
           </div>
           {filterProgram !== 'all' && (
-            <button onClick={() => setFilterProgram('all')}
+            <>
+              <div className="flex items-end gap-1">
+                <div>
+                  <label className={labelClass}>Year</label>
+                  <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
+                    className={selectClass} style={{ width: 'auto', minWidth: '100px' }}>
+                    <option value="">All</option>
+                    {["1","2","3","4"].map((y,i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]}</option>)}
+                  </select>
+                </div>
+                {filterYear && (
+                  <button onClick={() => setFilterYear('')} className="text-gray-400 hover:text-gray-600 text-lg pb-2 ml-0.5">✕</button>
+                )}
+              </div>
+              <div className="flex items-end gap-1">
+                <div>
+                  <label className={labelClass}>Section</label>
+                  <select value={filterSection} onChange={e => setFilterSection(e.target.value)}
+                    className={selectClass} style={{ width: 'auto', minWidth: '90px' }}>
+                    <option value="">All</option>
+                    {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {filterSection && (
+                  <button onClick={() => setFilterSection('')} className="text-gray-400 hover:text-gray-600 text-lg pb-2 ml-0.5">✕</button>
+                )}
+              </div>
+            </>
+          )}
+          {(filterProgram !== 'all' || searchTerm) && (
+            <button onClick={() => { setFilterProgram('all'); setFilterYear(''); setFilterSection(''); setSearchTerm(''); }}
               className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
               style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
-              Clear
+              Clear All
             </button>
           )}
         </div>
@@ -256,7 +329,7 @@ const ManageClassAssignments = () => {
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">{a.professorName}</p>
                       </div>
-                      <button onClick={() => handleDelete(a.id)}
+                      <button onClick={() => handleDelete(a)}
                         className="text-xs font-semibold px-3 py-1.5 rounded-full shrink-0 transition"
                         style={{ background: "#fee2e2", color: "#dc2626" }}>
                         Delete
@@ -269,6 +342,11 @@ const ManageClassAssignments = () => {
           </div>
         )}
       </div>
+
+      <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
+        danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(d => ({ ...d, isOpen: false }))} />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };

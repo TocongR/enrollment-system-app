@@ -1,10 +1,12 @@
 // src/components/ManageStudents.jsx
 import { useState, useEffect } from 'react';
 import {
-  collection, query, where, getDocs, doc, deleteDoc, setDoc
+  collection, query, where, getDocs, doc, deleteDoc, setDoc, updateDoc
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
+import ConfirmDialog from './ConfirmDialog';
+import Toast from './Toast';
 
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
@@ -17,10 +19,14 @@ const ManageStudents = () => {
   const [filterProgram, setFilterProgram] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [formData, setFormData] = useState({
     studentId: '', fullName: '', password: '',
     programId: '', yearLevel: '1', section: 'A'
   });
+  const [editData, setEditData] = useState({ fullName: '', programId: '', yearLevel: '1', section: 'A' });
 
   useEffect(() => { fetchData(); }, []);
 
@@ -56,19 +62,54 @@ const ManageStudents = () => {
 
       setShowAddForm(false);
       setFormData({ studentId: '', fullName: '', password: '', programId: '', yearLevel: '1', section: 'A' });
+      setToast({ message: 'Student added successfully!', type: 'success' });
       fetchData();
-    } catch (e) { alert(`Error: ${e.message}`); }
+    } catch (e) { setToast({ message: `Error: ${e.message}`, type: 'error' }); }
     setLoading(false);
   };
 
-  const handleDeleteStudent = async (studentId, uid) => {
-    if (!window.confirm(`Delete student ${studentId}? This will also delete all their enrollments.`)) return;
+  const handleEditStudent = (student) => {
+    setEditingStudent(student);
+    setEditData({
+      fullName: student.fullName,
+      programId: programs.find(p => p.code === student.programId)?.id || '',
+      yearLevel: String(student.yearLevel),
+      section: student.section
+    });
+  };
+
+  const handleUpdateStudent = async (e) => {
+    e.preventDefault();
     try {
-      await deleteDoc(doc(db, 'users', uid));
-      const enrollSnap = await getDocs(query(collection(db, 'enrollments'), where('studentId', '==', studentId)));
-      await Promise.all(enrollSnap.docs.map(d => deleteDoc(doc(db, 'enrollments', d.id))));
+      const program = programs.find(p => p.id === editData.programId);
+      await updateDoc(doc(db, 'users', editingStudent.id), {
+        fullName: editData.fullName,
+        programId: program ? program.code : editingStudent.programId,
+        programName: program ? program.name : editingStudent.programName,
+        yearLevel: parseInt(editData.yearLevel),
+        section: editData.section
+      });
+      setToast({ message: 'Student updated successfully!', type: 'success' });
+      setEditingStudent(null);
       fetchData();
-    } catch (e) { alert('Error deleting student'); }
+    } catch (e) { setToast({ message: 'Error updating student', type: 'error' }); }
+  };
+
+  const handleDeleteStudent = (studentId, uid) => {
+    setConfirmDialog({
+      isOpen: true, title: 'Delete Student', danger: true,
+      message: `Delete student ${studentId}? This will also delete all their enrollments.`,
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          await deleteDoc(doc(db, 'users', uid));
+          const enrollSnap = await getDocs(query(collection(db, 'enrollments'), where('studentId', '==', studentId)));
+          await Promise.all(enrollSnap.docs.map(d => deleteDoc(doc(db, 'enrollments', d.id))));
+          setToast({ message: 'Student deleted', type: 'success' });
+          fetchData();
+        } catch (e) { setToast({ message: 'Error deleting student', type: 'error' }); }
+      }
+    });
   };
 
   const getFilteredStudents = () => students.filter(s => {
@@ -237,12 +278,20 @@ const ManageStudents = () => {
                         </span>
                       </td>
                       <td className={tdClass}>
-                        <button
-                          onClick={() => handleDeleteStudent(s.studentId, s.id)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
-                          style={{ background: "#fee2e2", color: "#dc2626" }}>
-                          Delete
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditStudent(s)}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
+                            style={{ borderColor: "#e5e7eb", color: "#374151" }}>
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteStudent(s.studentId, s.id)}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                            style={{ background: "#fee2e2", color: "#dc2626" }}>
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -252,6 +301,58 @@ const ManageStudents = () => {
           )}
         </div>
       </div>
+
+      {/* Edit Student Modal */}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-dialogIn">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>Edit Student</h2>
+              <button onClick={() => setEditingStudent(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+            <form onSubmit={handleUpdateStudent} className="px-6 py-5 space-y-4">
+              <div>
+                <label className={labelClass}>Student ID</label>
+                <input type="text" value={editingStudent.studentId} disabled className={inputClass + " bg-gray-50"} />
+              </div>
+              <div>
+                <label className={labelClass}>Full Name *</label>
+                <input type="text" value={editData.fullName} onChange={e => setEditData(p => ({ ...p, fullName: e.target.value }))} className={inputClass} required />
+              </div>
+              <div>
+                <label className={labelClass}>Program *</label>
+                <select value={editData.programId} onChange={e => setEditData(p => ({ ...p, programId: e.target.value }))} className={inputClass} required>
+                  <option value="">Select Program</option>
+                  {programs.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Year Level *</label>
+                  <select value={editData.yearLevel} onChange={e => setEditData(p => ({ ...p, yearLevel: e.target.value }))} className={inputClass} required>
+                    {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Section *</label>
+                  <select value={editData.section} onChange={e => setEditData(p => ({ ...p, section: e.target.value }))} className={inputClass} required>
+                    {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setEditingStudent(null)} className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition" style={{ background: NAVY }}>Update Student</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
+        danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(d => ({ ...d, isOpen: false }))} />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };

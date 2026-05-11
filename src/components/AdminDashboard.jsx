@@ -10,6 +10,10 @@ import { db } from "../firebase/config";
 import ManageClassAssignments from "./ManageClassAssignments";
 import ManageStudents from "./ManageStudents";
 import EnrollmentPeriod from "./EnrollmentPeriod";
+import ManageCourses from "./ManageCourses";
+import ManageProfessors from "./ManageProfessors";
+import ConfirmDialog from "./ConfirmDialog";
+import Toast from "./Toast";
 
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
@@ -19,7 +23,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("pending");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [dropRequests, setDropRequests] = useState([]);
   const [pendingEnrollments, setPendingEnrollments] = useState([]);
   const [approvedEnrollments, setApprovedEnrollments] = useState([]);
@@ -29,6 +33,10 @@ const AdminDashboard = () => {
   const [selectedProgram, setSelectedProgram] = useState("all");
   const [availableSemesters, setAvailableSemesters] = useState([]);
   const [allPrograms, setAllPrograms] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: null, dir: 'asc' });
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
+  const [toast, setToast] = useState(null);
 
   const fetchData = useCallback(async () => {
     if (!currentUser) return;
@@ -65,43 +73,39 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => { await logout(); navigate("/"); };
 
-  const approveEnrollment = async (id) => {
-    try {
-      await updateDoc(doc(db, "enrollments", id), { status: "enrolled", approvedBy: userData.studentId, approvedAt: new Date() });
-      fetchData();
-    } catch (e) { alert("Error approving enrollment"); }
+  const approveEnrollment = (id) => {
+    setConfirmDialog({ isOpen: true, title: 'Approve Enrollment', message: 'Approve this enrollment request?',
+      onConfirm: async () => { setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try { await updateDoc(doc(db, "enrollments", id), { status: "enrolled", approvedBy: userData.studentId, approvedAt: new Date() }); setToast({ message: 'Enrollment approved', type: 'success' }); fetchData(); } catch (e) { setToast({ message: 'Error', type: 'error' }); }
+    }});
   };
 
-  const rejectEnrollment = async (id) => {
-    if (!window.confirm("Reject this enrollment?")) return;
-    try {
-      await updateDoc(doc(db, "enrollments", id), { status: "rejected", rejectedBy: userData.studentId, rejectedAt: new Date() });
-      fetchData();
-    } catch (e) { alert("Error rejecting enrollment"); }
+  const rejectEnrollment = (id) => {
+    setConfirmDialog({ isOpen: true, title: 'Reject Enrollment', message: 'Reject this enrollment? Please provide a reason.', danger: true, showReasonInput: true, reasonLabel: 'Rejection Reason',
+      onConfirm: async (reason) => { setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try { await updateDoc(doc(db, "enrollments", id), { status: "rejected", rejectedBy: userData.studentId, rejectedAt: new Date(), rejectionReason: reason || '' }); setToast({ message: 'Enrollment rejected', type: 'success' }); fetchData(); } catch (e) { setToast({ message: 'Error', type: 'error' }); }
+    }});
   };
 
-  const dropEnrollment = async (id) => {
-    if (!window.confirm("Drop this enrollment?")) return;
-    try {
-      await updateDoc(doc(db, "enrollments", id), { status: "dropped", droppedBy: userData.studentId, droppedAt: new Date() });
-      fetchData();
-    } catch (e) { alert("Error dropping enrollment"); }
+  const dropEnrollment = (id) => {
+    setConfirmDialog({ isOpen: true, title: 'Drop Enrollment', message: 'Drop this student from the course?', danger: true,
+      onConfirm: async () => { setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try { await updateDoc(doc(db, "enrollments", id), { status: "dropped", droppedBy: userData.studentId, droppedAt: new Date() }); setToast({ message: 'Student dropped', type: 'success' }); fetchData(); } catch (e) { setToast({ message: 'Error', type: 'error' }); }
+    }});
   };
 
-  const approveDropRequest = async (id) => {
-    if (!window.confirm("Approve this drop request?")) return;
-    try {
-      await updateDoc(doc(db, "enrollments", id), { status: "dropped", droppedBy: userData.studentId, droppedAt: new Date() });
-      fetchData();
-    } catch (e) { alert("Error approving drop"); }
+  const approveDropRequest = (id) => {
+    setConfirmDialog({ isOpen: true, title: 'Approve Drop Request', message: 'Approve this drop request?',
+      onConfirm: async () => { setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try { await updateDoc(doc(db, "enrollments", id), { status: "dropped", droppedBy: userData.studentId, droppedAt: new Date() }); setToast({ message: 'Drop approved', type: 'success' }); fetchData(); } catch (e) { setToast({ message: 'Error', type: 'error' }); }
+    }});
   };
 
-  const rejectDropRequest = async (id) => {
-    if (!window.confirm("Reject drop request? Student will remain enrolled.")) return;
-    try {
-      await updateDoc(doc(db, "enrollments", id), { status: "enrolled", dropReason: null, dropRequestedAt: null });
-      fetchData();
-    } catch (e) { alert("Error rejecting drop"); }
+  const rejectDropRequest = (id) => {
+    setConfirmDialog({ isOpen: true, title: 'Reject Drop Request', message: 'Reject this drop request? Student will remain enrolled.', danger: true, showReasonInput: true, reasonLabel: 'Rejection Reason',
+      onConfirm: async (reason) => { setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try { await updateDoc(doc(db, "enrollments", id), { status: "enrolled", dropRejectedAt: new Date(), dropRejectionReason: reason || '' }); setToast({ message: 'Drop request rejected', type: 'success' }); fetchData(); } catch (e) { setToast({ message: 'Error', type: 'error' }); }
+    }});
   };
 
   const filterByProgram = (list) =>
@@ -120,14 +124,29 @@ const AdminDashboard = () => {
     return Object.values(map).sort((a, b) => b.count - a.count);
   };
 
+  const sortList = (list) => {
+    if (!sortConfig.key) return list;
+    return [...list].sort((a, b) => {
+      let aVal = a[sortConfig.key] || ''; let bVal = b[sortConfig.key] || '';
+      if (typeof aVal === 'string') { aVal = aVal.toLowerCase(); bVal = bVal.toLowerCase(); }
+      if (aVal < bVal) return sortConfig.dir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+  const handleSort = (key) => setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
+  const sortIcon = (key) => sortConfig.key === key ? (sortConfig.dir === 'asc' ? ' ▲' : ' ▼') : '';
+
   const tabs = [
-    { key: "pending",      label: `Pending (${filteredPending.length})` },
-    { key: "drop-requests",label: `Drop Requests (${filteredDrops.length})` },
-    { key: "approved",     label: `Approved (${filteredApproved.length})` },
-    { key: "overview",     label: "Course Overview" },
-    { key: "assignments",  label: "Manage Classes" },
-    { key: "students",     label: "Manage Students" },
-    { key: "period",       label: "Enrollment Period" },
+    { key: "dashboard",    label: "Dashboard", icon: "⌂" },
+    { key: "pending",      label: `Pending (${filteredPending.length})`, icon: "⏳" },
+    { key: "drop-requests",label: `Drop Requests (${filteredDrops.length})`, icon: "↓" },
+    { key: "approved",     label: `Approved (${filteredApproved.length})`, icon: "✓" },
+    { key: "assignments",  label: "Manage Classes", icon: "▦" },
+    { key: "students",     label: "Manage Students", icon: "☺" },
+    { key: "courses",      label: "Manage Courses", icon: "○" },
+    { key: "professors",   label: "Manage Professors", icon: "★" },
+    { key: "period",       label: "Enrollment Period", icon: "☈" },
   ];
 
   const stats = [
@@ -158,6 +177,7 @@ const AdminDashboard = () => {
       {/* Navbar */}
       <nav className="flex items-center justify-between px-6 py-3 shadow-sm sticky top-0 z-40" style={{ background: NAVY }}>
         <div className="flex items-center gap-3">
+          <button onClick={() => setSidebarOpen(v => !v)} className="text-white text-xl hover:bg-white/10 p-1.5 rounded-lg transition">☰</button>
           <span className="font-bold text-sm px-2.5 py-1 rounded-md" style={{ background: GOLD, color: NAVY, fontFamily: "'Sora', sans-serif" }}>ENROLL</span>
           <span className="text-white/60 text-sm hidden sm:block">Admin Portal</span>
         </div>
@@ -170,6 +190,29 @@ const AdminDashboard = () => {
           </button>
         </div>
       </nav>
+
+      {/* Sidebar overlay */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
+      {/* Sidebar */}
+      <div className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={{ background: NAVY }}>
+        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+          <span className="font-bold text-sm px-2.5 py-1 rounded-md" style={{ background: GOLD, color: NAVY }}>ENROLL</span>
+          <button onClick={() => setSidebarOpen(false)} className="text-white/60 hover:text-white text-xl">×</button>
+        </div>
+        <nav className="py-2">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => { setActiveTab(t.key); setSidebarOpen(false); }}
+              className="w-full text-left px-5 py-3 text-sm font-medium transition flex items-center gap-3"
+              style={activeTab === t.key
+                ? { background: 'rgba(255,255,255,0.12)', color: '#fff' }
+                : { color: 'rgba(255,255,255,0.6)' }}>
+              <span className="text-base">{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
 
@@ -194,53 +237,67 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-          {stats.map(s => (
-            <div key={s.label} className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 text-center">
-              <p className="text-3xl font-bold" style={{
-                fontFamily: "'Sora', sans-serif",
-                color: s.warn ? "#d97706" : s.success ? "#16a34a" : s.danger ? "#dc2626" : NAVY
-              }}>{s.value}</p>
-              <p className="text-xs text-gray-400 mt-1">{s.label}</p>
+        {/* Tabs removed - now using sidebar */}
+
+        {/* ── DASHBOARD TAB ── */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-6">
+            {/* Stat cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+              {stats.map(s => (
+                <div key={s.label} className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 text-center cursor-pointer hover:shadow-md transition"
+                  onClick={() => { if (s.label === 'Pending') setActiveTab('pending'); else if (s.label === 'Enrolled') setActiveTab('approved'); else if (s.label === 'Drop Requests') setActiveTab('drop-requests'); }}>
+                  <p className="text-3xl font-bold" style={{
+                    fontFamily: "'Sora', sans-serif",
+                    color: s.warn ? "#d97706" : s.success ? "#16a34a" : s.danger ? "#dc2626" : NAVY
+                  }}>{s.value}</p>
+                  <p className="text-xs text-gray-400 mt-1">{s.label}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-400 font-medium">Program</label>
-            <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
-              <option value="all">All Programs</option>
-              {allPrograms.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
-            </select>
+            {/* Course Overview */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100">
+                <p className="text-sm font-semibold text-gray-500">Course Overview — {selectedSemester}</p>
+              </div>
+              {getEnrollmentsByCourse().length === 0 ? (
+                <div className="px-6 py-10 text-center text-gray-400 text-sm">No enrollments yet.</div>
+              ) : (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
+                  {getEnrollmentsByCourse().map((course, i) => (
+                    <div key={i} className="rounded-xl border border-gray-100 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-50" style={{ background: `${NAVY}08` }}>
+                        <span className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>{course.courseCode}</span>
+                        <p className="text-xs text-gray-400 mt-0.5">{course.courseTitle}</p>
+                      </div>
+                      <div className="px-4 py-3 flex items-center gap-3">
+                        <span className="text-3xl font-bold" style={{ color: NAVY, fontFamily: "'Sora', sans-serif" }}>{course.count}</span>
+                        <span className="text-sm text-gray-400">students</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          {selectedProgram !== "all" && (
-            <button onClick={() => setSelectedProgram("all")}
-              className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
-              style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
-              Clear
-            </button>
-          )}
-        </div>
-
-        {/* Tabs — scrollable on mobile */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-1 flex gap-1 overflow-x-auto">
-          {tabs.map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className="shrink-0 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all whitespace-nowrap"
-              style={activeTab === t.key
-                ? { background: NAVY, color: "#fff" }
-                : { background: "transparent", color: "#6b7280" }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        )}
 
         {/* ── PENDING TAB ── */}
         {activeTab === "pending" && (
+          <div className="space-y-4">
+            {/* Filters */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400 font-medium">Program</label>
+                <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                  <option value="all">All Programs</option>
+                  {allPrograms.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
+                </select>
+              </div>
+              {selectedProgram !== "all" && <button onClick={() => setSelectedProgram("all")} className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50" style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear</button>}
+            </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100">
               <p className="text-sm font-semibold text-gray-500">Pending Enrollment Requests</p>
@@ -252,13 +309,13 @@ const AdminDashboard = () => {
                 <table className="w-full">
                   <thead className="border-b border-gray-100 bg-gray-50/60">
                     <tr>
-                      {["Student ID", "Name", "Course", "Program", "Professor", "Requested", "Actions"].map(h => (
-                        <th key={h} className={thClass}>{h}</th>
+                      {[["studentId","Student ID"],["studentName","Name"],["courseCode","Course"],["programId","Program"],["professorName","Professor"],[null,"Requested"],[null,"Actions"]].map(([k,h]) => (
+                        <th key={h} className={thClass + (k ? " cursor-pointer hover:text-gray-600" : "")} onClick={() => k && handleSort(k)}>{h}{k ? sortIcon(k) : ''}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredPending.map(e => (
+                    {sortList(filteredPending).map(e => (
                       <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className={tdClass}>{e.studentId}</td>
                         <td className={tdClass + " font-medium"}>{e.studentName}</td>
@@ -292,10 +349,23 @@ const AdminDashboard = () => {
               </div>
             )}
           </div>
+          </div>
         )}
 
         {/* ── DROP REQUESTS TAB ── */}
         {activeTab === "drop-requests" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400 font-medium">Program</label>
+                <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                  <option value="all">All Programs</option>
+                  {allPrograms.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
+                </select>
+              </div>
+              {selectedProgram !== "all" && <button onClick={() => setSelectedProgram("all")} className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50" style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear</button>}
+            </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100">
               <p className="text-sm font-semibold text-gray-500">Drop Requests</p>
@@ -307,13 +377,13 @@ const AdminDashboard = () => {
                 <table className="w-full">
                   <thead className="border-b border-gray-100 bg-gray-50/60">
                     <tr>
-                      {["Student ID", "Name", "Course", "Program", "Reason", "Requested", "Actions"].map(h => (
-                        <th key={h} className={thClass}>{h}</th>
+                      {[["studentId","Student ID"],["studentName","Name"],["courseCode","Course"],["programId","Program"],[null,"Reason"],[null,"Requested"],[null,"Actions"]].map(([k,h]) => (
+                        <th key={h} className={thClass + (k ? " cursor-pointer hover:text-gray-600" : "")} onClick={() => k && handleSort(k)}>{h}{k ? sortIcon(k) : ''}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredDrops.map(r => (
+                    {sortList(filteredDrops).map(r => (
                       <tr key={r.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className={tdClass}>{r.studentId}</td>
                         <td className={tdClass + " font-medium"}>{r.studentName}</td>
@@ -349,10 +419,23 @@ const AdminDashboard = () => {
               </div>
             )}
           </div>
+          </div>
         )}
 
         {/* ── APPROVED TAB ── */}
         {activeTab === "approved" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400 font-medium">Program</label>
+                <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                  <option value="all">All Programs</option>
+                  {allPrograms.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
+                </select>
+              </div>
+              {selectedProgram !== "all" && <button onClick={() => setSelectedProgram("all")} className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50" style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear</button>}
+            </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100">
               <p className="text-sm font-semibold text-gray-500">Approved Enrollments</p>
@@ -364,13 +447,13 @@ const AdminDashboard = () => {
                 <table className="w-full">
                   <thead className="border-b border-gray-100 bg-gray-50/60">
                     <tr>
-                      {["Student ID", "Name", "Course", "Program", "Professor", "Status", "Actions"].map(h => (
-                        <th key={h} className={thClass}>{h}</th>
+                      {[["studentId","Student ID"],["studentName","Name"],["courseCode","Course"],["programId","Program"],["professorName","Professor"],[null,"Status"],[null,"Actions"]].map(([k,h]) => (
+                        <th key={h} className={thClass + (k ? " cursor-pointer hover:text-gray-600" : "")} onClick={() => k && handleSort(k)}>{h}{k ? sortIcon(k) : ''}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredApproved.map(e => (
+                    {sortList(filteredApproved).map(e => (
                       <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className={tdClass}>{e.studentId}</td>
                         <td className={tdClass + " font-medium"}>{e.studentName}</td>
@@ -397,33 +480,9 @@ const AdminDashboard = () => {
               </div>
             )}
           </div>
+          </div>
         )}
 
-        {/* ── COURSE OVERVIEW TAB ── */}
-        {activeTab === "overview" && (
-          getEnrollmentsByCourse().length === 0 ? (
-            <div className="bg-white rounded-2xl px-6 py-10 text-center text-gray-400 shadow-sm border border-gray-100 text-sm">
-              No enrollments yet.
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {getEnrollmentsByCourse().map((course, i) => (
-                <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-50" style={{ background: `${NAVY}08` }}>
-                    <span className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>{course.courseCode}</span>
-                    <p className="text-xs text-gray-400 mt-0.5">{course.courseTitle}</p>
-                  </div>
-                  <div className="px-5 py-4 flex items-center gap-3">
-                    <span className="text-4xl font-bold" style={{ color: NAVY, fontFamily: "'Sora', sans-serif" }}>{course.count}</span>
-                    <span className="text-sm text-gray-400">students enrolled</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        )}
-
-        {/* ── DELEGATED TABS ── */}
         {activeTab === "assignments" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <ManageClassAssignments />
@@ -434,6 +493,16 @@ const AdminDashboard = () => {
             <ManageStudents />
           </div>
         )}
+        {activeTab === "courses" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <ManageCourses />
+          </div>
+        )}
+        {activeTab === "professors" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <ManageProfessors />
+          </div>
+        )}
         {activeTab === "period" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <EnrollmentPeriod />
@@ -441,6 +510,12 @@ const AdminDashboard = () => {
         )}
 
       </div>
+
+      <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
+        danger={confirmDialog.danger} showReasonInput={confirmDialog.showReasonInput} reasonLabel={confirmDialog.reasonLabel}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(d => ({ ...d, isOpen: false }))} />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };

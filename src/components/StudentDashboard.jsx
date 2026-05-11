@@ -7,6 +7,7 @@ import {
   getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
+import ConfirmDialog from "./ConfirmDialog";
 
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
@@ -53,6 +54,8 @@ const StudentDashboard = () => {
   const [allAvailableCourses, setAllAvailableCourses] = useState([]);
   const [selectedAddCourse, setSelectedAddCourse] = useState("");
   const [addCourseReason, setAddCourseReason] = useState("");
+  const [allCoursesData, setAllCoursesData] = useState([]);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, danger: false });
 
   // No external deps — stable with empty array
   const fetchAvailableSemesters = useCallback(async () => {
@@ -103,6 +106,9 @@ const StudentDashboard = () => {
         ));
         setEnrolledCourses(enrollSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       }
+      // Fetch all courses for prerequisite data
+      const coursesSnap = await getDocs(collection(db, "courses"));
+      setAllCoursesData(coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       await checkEnrollmentPeriod();
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -119,8 +125,7 @@ const StudentDashboard = () => {
     );
   };
 
-  const handleEnroll = async () => {
-    if (!selectedCourses.length) return alert("Select at least one course.");
+  const doEnroll = async () => {
     setEnrolling(true);
     try {
       for (const id of selectedCourses) {
@@ -134,21 +139,28 @@ const StudentDashboard = () => {
           status: "pending", requestedAt: new Date(),
         });
       }
-      alert("Enrollment request submitted! Waiting for admin approval.");
       fetchData(); setSelectedCourses([]);
-    } catch (e) { alert("Error submitting enrollment."); }
+    } catch (e) { console.error(e); }
     setEnrolling(false);
   };
 
-  const submitDropRequest = async () => {
-    if (!dropReason.trim()) return alert("Please provide a reason.");
-    try {
-      await updateDoc(doc(db, "enrollments", selectedDropCourse.id), {
-        status: "drop-requested", dropReason, dropRequestedAt: new Date(),
-      });
-      alert("Drop request submitted!");
-      fetchData(); setShowDropModal(false); setDropReason(""); setSelectedDropCourse(null);
-    } catch (e) { alert("Error submitting drop request."); }
+  const handleEnroll = () => {
+    if (!selectedCourses.length) return;
+    const names = selectedCourses.map(id => availableCourses.find(x => x.id === id)?.courseCode).join(', ');
+    setConfirmDialog({ isOpen: true, title: 'Confirm Enrollment', message: `Submit enrollment request for: ${names}?`, danger: false, onConfirm: () => { setConfirmDialog(d => ({ ...d, isOpen: false })); doEnroll(); } });
+  };
+
+  const submitDropRequest = () => {
+    if (!dropReason.trim()) return;
+    setConfirmDialog({ isOpen: true, title: 'Confirm Drop Request', message: `Are you sure you want to request dropping ${selectedDropCourse?.courseCode}?`, danger: true, onConfirm: async () => {
+      setConfirmDialog(d => ({ ...d, isOpen: false }));
+      try {
+        await updateDoc(doc(db, "enrollments", selectedDropCourse.id), {
+          status: "drop-requested", dropReason, dropRequestedAt: new Date(),
+        });
+        fetchData(); setShowDropModal(false); setDropReason(""); setSelectedDropCourse(null);
+      } catch (e) { console.error(e); }
+    }});
   };
 
   const fetchAllCoursesForSemester = async () => {
@@ -167,32 +179,38 @@ const StudentDashboard = () => {
     } catch (e) { console.error(e); }
   };
 
-  const handleRequestAddCourse = async () => {
-    if (!selectedAddCourse) return alert("Please select a course.");
-    if (!addCourseReason.trim()) return alert("Please provide a reason.");
-    try {
-      const c = allAvailableCourses.find(x => x.id === selectedAddCourse);
-      await addDoc(collection(db, "courseAddRequests"), {
-        studentId: userData.studentId, studentName: userData.fullName,
-        classAssignmentId: c.id, courseId: c.courseId, courseCode: c.courseCode,
-        courseTitle: c.courseTitle, units: c.units, professorId: c.professorId,
-        professorName: c.professorName, programId: c.programId,
-        yearLevel: c.yearLevel, section: c.section, studentYearLevel: userData.yearLevel,
-        semester: selectedSemester, reason: addCourseReason, status: "pending",
-        requestedAt: new Date(),
-      });
-      alert("Course add request submitted!");
-      setShowAddCourseModal(false); setSelectedAddCourse(""); setAddCourseReason("");
-    } catch (e) { alert("Error submitting request."); }
+  const handleRequestAddCourse = () => {
+    if (!selectedAddCourse || !addCourseReason.trim()) return;
+    const c = allAvailableCourses.find(x => x.id === selectedAddCourse);
+    setConfirmDialog({ isOpen: true, title: 'Confirm Course Request', message: `Submit add request for ${c?.courseCode} — ${c?.courseTitle}?`, danger: false, onConfirm: async () => {
+      setConfirmDialog(d => ({ ...d, isOpen: false }));
+      try {
+        await addDoc(collection(db, "courseAddRequests"), {
+          studentId: userData.studentId, studentName: userData.fullName,
+          classAssignmentId: c.id, courseId: c.courseId, courseCode: c.courseCode,
+          courseTitle: c.courseTitle, units: c.units, professorId: c.professorId,
+          professorName: c.professorName, programId: c.programId,
+          yearLevel: c.yearLevel, section: c.section, studentYearLevel: userData.yearLevel,
+          semester: selectedSemester, reason: addCourseReason, status: "pending",
+          requestedAt: new Date(),
+        });
+        setShowAddCourseModal(false); setSelectedAddCourse(""); setAddCourseReason("");
+      } catch (e) { console.error(e); }
+    }});
   };
 
   const getEnrollmentStatus = (id) => enrolledCourses.find(e => e.classAssignmentId === id)?.status ?? null;
   const isAlreadyEnrolled = (id) => enrolledCourses.some(e => e.classAssignmentId === id);
   const getTotalUnits = () => selectedCourses.reduce((t, id) => t + (availableCourses.find(c => c.id === id)?.units ?? 0), 0);
   const getEnrolledTotalUnits = () => enrolledCourses.filter(e => e.status === "enrolled").reduce((t, e) => t + e.units, 0);
+  const getPrerequisites = (courseCode) => {
+    const course = allCoursesData.find(c => c.code === courseCode);
+    return course?.prerequisites || [];
+  };
+
   const getFilteredEnrolledCourses = () => {
     if (activeTab === "enrolled") return enrolledCourses.filter(e => e.status === "enrolled" || e.status === "drop-requested");
-    if (activeTab === "history") return enrolledCourses.filter(e => e.status === "dropped" || e.status === "rejected");
+    if (activeTab === "history") return enrolledCourses.filter(e => e.status === "dropped" || e.status === "rejected" || e.dropRejectedAt);
     return [];
   };
 
@@ -324,6 +342,14 @@ const StudentDashboard = () => {
                               {status && <Badge status={status} />}
                             </div>
                             <p className="text-xs text-gray-400 mt-1">{course.units} units · {course.professorName}</p>
+                            {getPrerequisites(course.courseCode).length > 0 && (
+                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                <span className="text-xs text-amber-600 font-semibold">Prerequisites:</span>
+                                {getPrerequisites(course.courseCode).map(p => (
+                                  <span key={p} className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">{p}</span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </label>
                       );
@@ -423,11 +449,23 @@ const StudentDashboard = () => {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-gray-900">{enrollment.courseCode}</span>
                       <span className="text-gray-600 text-sm">{enrollment.courseTitle}</span>
-                      <Badge status={enrollment.status} />
+                      <Badge status={enrollment.dropRejectedAt && enrollment.status === 'enrolled' ? 'rejected' : enrollment.status} />
+                      {enrollment.dropRejectedAt && enrollment.status === 'enrolled' && (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-100 text-orange-800">Drop Denied</span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{enrollment.units} units · {enrollment.professorName}</p>
                     {enrollment.dropReason && (
                       <p className="text-xs text-gray-500 mt-1">Drop reason: {enrollment.dropReason}</p>
+                    )}
+                    {enrollment.rejectionReason && (
+                      <p className="text-xs text-red-500 mt-1">Rejection reason: {enrollment.rejectionReason}</p>
+                    )}
+                    {enrollment.rejectedAt && (
+                      <p className="text-xs text-gray-400 mt-0.5">Rejected on: {new Date(enrollment.rejectedAt.seconds ? enrollment.rejectedAt.seconds * 1000 : enrollment.rejectedAt).toLocaleString()}</p>
+                    )}
+                    {enrollment.dropRejectedAt && (
+                      <p className="text-xs text-gray-400 mt-0.5">Drop denied on: {new Date(enrollment.dropRejectedAt.seconds ? enrollment.dropRejectedAt.seconds * 1000 : enrollment.dropRejectedAt).toLocaleString()}</p>
                     )}
                   </div>
                 ))}
@@ -510,6 +548,16 @@ const StudentDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        danger={confirmDialog.danger}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(d => ({ ...d, isOpen: false }))}
+      />
     </div>
   );
 };

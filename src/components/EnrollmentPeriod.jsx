@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import ConfirmDialog from './ConfirmDialog';
+import Toast from './Toast';
 
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
@@ -29,6 +31,9 @@ const EnrollmentPeriod = () => {
   const [formData, setFormData] = useState({
     semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true
   });
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
 
   const emptyForm = { semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true };
 
@@ -103,36 +108,54 @@ const EnrollmentPeriod = () => {
 
       if (editingPeriod) {
         await setDoc(doc(db, 'enrollmentPeriods', editingPeriod.id), { ...data, createdAt: editingPeriod.createdAt });
+        setToast({ message: 'Enrollment period updated!', type: 'success' });
       } else {
         await setDoc(doc(db, 'enrollmentPeriods', formData.semester.replace(/\s+/g, '-')), { ...data, createdAt: new Date() });
+        setToast({ message: 'Enrollment period created!', type: 'success' });
+        setShowCreateForm(false);
       }
 
       setFormData(emptyForm); setEditingPeriod(null); fetchData();
-    } catch (e) { alert('Error saving settings'); }
+    } catch (e) { setToast({ message: 'Error saving settings', type: 'error' }); }
     setSaving(false);
   };
 
   const handleEdit = (period) => {
     setEditingPeriod(period);
     setFormData({ semester: period.semester, startDate: period.startDate, endDate: period.endDate, isActive: period.isActive, autoToggle: period.autoToggle });
+    setShowCreateForm(true);
   };
 
-  const handleCancelEdit = () => { setEditingPeriod(null); setFormData(emptyForm); };
+  const handleCancelEdit = () => { setEditingPeriod(null); setFormData(emptyForm); setShowCreateForm(false); };
 
   const handleToggleActive = async (period) => {
-    if (period.autoToggle) { alert('Auto-toggle is enabled. Edit the period to disable it first.'); return; }
-    try {
-      await setDoc(doc(db, 'enrollmentPeriods', period.id), { ...period, isActive: !period.isActive, updatedAt: new Date() });
-      fetchData();
-    } catch (e) { alert('Error updating status'); }
+    if (period.autoToggle) { setToast({ message: 'Auto-toggle is enabled. Edit the period to disable it first.', type: 'info' }); return; }
+    setConfirmDialog({
+      isOpen: true, title: period.isActive ? 'Close Enrollment' : 'Open Enrollment',
+      message: `${period.isActive ? 'Close' : 'Open'} enrollment for ${period.semester}?`, danger: period.isActive,
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          await setDoc(doc(db, 'enrollmentPeriods', period.id), { ...period, isActive: !period.isActive, updatedAt: new Date() });
+          fetchData();
+        } catch (e) { setToast({ message: 'Error updating status', type: 'error' }); }
+      }
+    });
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this enrollment period?')) return;
-    try {
-      await setDoc(doc(db, 'enrollmentPeriods', id), { deleted: true, deletedAt: new Date() });
-      fetchData();
-    } catch (e) { alert('Error deleting period'); }
+  const handleDelete = (id) => {
+    setConfirmDialog({
+      isOpen: true, title: 'Delete Enrollment Period', danger: true,
+      message: 'Delete this enrollment period? This cannot be undone.',
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          await setDoc(doc(db, 'enrollmentPeriods', id), { deleted: true, deletedAt: new Date() });
+          setToast({ message: 'Period deleted', type: 'success' });
+          fetchData();
+        } catch (e) { setToast({ message: 'Error deleting period', type: 'error' }); }
+      }
+    });
   };
 
   const getPeriodStatus = (period) => {
@@ -167,11 +190,19 @@ const EnrollmentPeriod = () => {
     <div className="p-6 space-y-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-          Enrollment Period Management
-        </h2>
-        <p className="text-sm text-gray-400 mt-0.5">Set enrollment dates per semester</p>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+            Enrollment Period Management
+          </h2>
+          <p className="text-sm text-gray-400 mt-0.5">Set enrollment dates per semester</p>
+        </div>
+        <button
+          onClick={() => { setShowCreateForm(v => !v); if (showCreateForm) handleCancelEdit(); }}
+          className="text-sm font-semibold px-5 py-2.5 rounded-full transition"
+          style={showCreateForm ? { background: "#f3f4f6", color: "#6b7280" } : { background: NAVY, color: "#fff" }}>
+          {showCreateForm ? '✕ Cancel' : '+ Add Enrollment Period'}
+        </button>
       </div>
 
       {/* Status banner */}
@@ -196,6 +227,7 @@ const EnrollmentPeriod = () => {
       </div>
 
       {/* Form */}
+      {showCreateForm && (
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
           <p className="text-sm font-semibold text-gray-600">
@@ -267,6 +299,7 @@ const EnrollmentPeriod = () => {
           </div>
         </form>
       </div>
+      )}
 
       {/* Periods list */}
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
@@ -304,7 +337,7 @@ const EnrollmentPeriod = () => {
                         <p>Start: {new Date(period.startDate).toLocaleString()}</p>
                         <p>End: {new Date(period.endDate).toLocaleString()}</p>
                         {period.lastAutoUpdate && (
-                          <p className="text-gray-300">
+                          <p className="text-gray-300" style={{ opacity: 0.6 }}>
                             Last auto-update: {new Date(period.lastAutoUpdate.seconds * 1000).toLocaleString()}
                           </p>
                         )}
@@ -360,6 +393,11 @@ const EnrollmentPeriod = () => {
           ))}
         </div>
       </div>
+
+      <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
+        danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(d => ({ ...d, isOpen: false }))} />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };
