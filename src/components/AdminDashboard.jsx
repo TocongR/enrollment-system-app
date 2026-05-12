@@ -154,7 +154,6 @@ const AdminDashboard = () => {
     { key: "dashboard",    label: "Dashboard", icon: "📊" },
     { key: "pending",      label: `Pending Enrollment (${filteredPending.length})`, icon: "📋" },
     { key: "drop-requests",label: `Drop Requests (${filteredDrops.length})`, icon: "📋" },
-    { key: "approved",     label: `Approved (${filteredApproved.length})`, icon: "📋" },
     { key: "assignments",  label: "Manage Classes", icon: "📚" },
     { key: "students",     label: "Manage Students", icon: "👤" },
     { key: "courses",      label: "Manage Courses", icon: "📖" },
@@ -259,13 +258,21 @@ const AdminDashboard = () => {
         {/* Tabs removed - now using sidebar */}
 
         {/* ── DASHBOARD TAB ── */}
-        {activeTab === "dashboard" && (
+        {activeTab === "dashboard" && (() => {
+          let list = filteredApproved;
+          if (approvedFilterYear) list = list.filter(e => String(e.yearLevel) === approvedFilterYear);
+          if (approvedFilterSection) list = list.filter(e => e.section === approvedFilterSection);
+          if (approvedSearch) {
+            const t = approvedSearch.toLowerCase();
+            list = list.filter(e => e.studentId?.toLowerCase().includes(t) || e.studentName?.toLowerCase().includes(t));
+          }
+          return (
           <div className="space-y-6">
             {/* Stat cards */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               {stats.map(s => (
                 <div key={s.label} className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 text-center cursor-pointer hover:shadow-md transition"
-                  onClick={() => { if (s.label === 'Pending') setActiveTab('pending'); else if (s.label === 'Enrolled') setActiveTab('approved'); else if (s.label === 'Drop Requests') setActiveTab('drop-requests'); }}>
+                  onClick={() => { if (s.label === 'Pending') setActiveTab('pending'); else if (s.label === 'Drop Requests') setActiveTab('drop-requests'); }}>
                   <p className="text-3xl font-bold" style={{
                     fontFamily: "'Sora', sans-serif",
                     color: s.warn ? "#d97706" : s.success ? "#16a34a" : s.danger ? "#dc2626" : NAVY
@@ -274,8 +281,97 @@ const AdminDashboard = () => {
                 </div>
               ))}
             </div>
+
+            {/* Approved Enrollments */}
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-400 font-medium">Search</label>
+                  <input type="text" placeholder="Student ID or name..." value={approvedSearch}
+                    onChange={e => setApprovedSearch(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ minWidth: '180px' }} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-400 font-medium">Program</label>
+                  <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                    <option value="all">All Programs</option>
+                    {allPrograms.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
+                  </select>
+                </div>
+                {selectedProgram !== "all" && (
+                  <>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-gray-400 font-medium">Year</label>
+                      <select value={approvedFilterYear} onChange={e => setApprovedFilterYear(e.target.value)}
+                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                        <option value="">All Years</option>
+                        {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-gray-400 font-medium">Section</label>
+                      <select value={approvedFilterSection} onChange={e => setApprovedFilterSection(e.target.value)}
+                        className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
+                        <option value="">All Sections</option>
+                        {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </>
+                )}
+                {(selectedProgram !== "all" || approvedSearch || approvedFilterYear || approvedFilterSection) && (
+                  <button onClick={() => { setSelectedProgram("all"); setApprovedFilterYear(''); setApprovedFilterSection(''); setApprovedSearch(''); }}
+                    className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
+                    style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear All</button>
+                )}
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-500">Approved Enrollments</p>
+                  <p className="text-xs text-gray-400">{list.length} results</p>
+                </div>
+                {list.length === 0 ? (
+                  <div className="px-6 py-10 text-center text-gray-400 text-sm">No approved enrollments found.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="border-b border-gray-100 bg-gray-50/60">
+                        <tr>
+                          {[["studentId","Student ID"],["studentName","Name"],["courseCode","Course"],["programId","Program"],["professorName","Professor"],[null,"Status"],[null,"Actions"]].map(([k,h]) => (
+                            <th key={h} className={thClass + (k ? " cursor-pointer hover:text-gray-600" : "")} onClick={() => k && handleSort(k)}>{h}{k ? sortIcon(k) : ''}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {sortList(list).map(e => (
+                          <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className={tdClass}>{e.studentId}</td>
+                            <td className={tdClass + " font-medium"}>{e.studentName}</td>
+                            <td className={tdClass}>
+                              <span className="font-semibold text-gray-900">{e.courseCode}</span>
+                              <br /><span className="text-xs text-gray-400">{e.courseTitle}</span>
+                            </td>
+                            <td className={tdClass}>{e.programId}-{e.yearLevel}{e.section}</td>
+                            <td className={tdClass}>{e.professorName}</td>
+                            <td className={tdClass}>
+                              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-800">Enrolled</span>
+                            </td>
+                            <td className={tdClass}>
+                              <button onClick={() => dropEnrollment(e.id)}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-red-50"
+                                style={{ borderColor: "#fca5a5", color: "#dc2626" }}>Drop</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ── PENDING TAB ── */}
         {activeTab === "pending" && (
@@ -416,104 +512,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* ── APPROVED TAB ── */}
-        {activeTab === "approved" && (() => {
-          let list = filteredApproved;
-          if (approvedFilterYear) list = list.filter(e => String(e.yearLevel) === approvedFilterYear);
-          if (approvedFilterSection) list = list.filter(e => e.section === approvedFilterSection);
-          if (approvedSearch) {
-            const t = approvedSearch.toLowerCase();
-            list = list.filter(e => e.studentId?.toLowerCase().includes(t) || e.studentName?.toLowerCase().includes(t));
-          }
-          return (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400 font-medium">Search</label>
-                <input type="text" placeholder="Student ID or name..." value={approvedSearch}
-                  onChange={e => setApprovedSearch(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ minWidth: '180px' }} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-400 font-medium">Program</label>
-                <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
-                  <option value="all">All Programs</option>
-                  {allPrograms.map(p => <option key={p.id} value={p.code}>{p.code} — {p.name}</option>)}
-                </select>
-              </div>
-              {selectedProgram !== "all" && (
-                <>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-400 font-medium">Year</label>
-                    <select value={approvedFilterYear} onChange={e => setApprovedFilterYear(e.target.value)}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
-                      <option value="">All Years</option>
-                      {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>)}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-gray-400 font-medium">Section</label>
-                    <select value={approvedFilterSection} onChange={e => setApprovedFilterSection(e.target.value)}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
-                      <option value="">All Sections</option>
-                      {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </>
-              )}
-              {(selectedProgram !== "all" || approvedSearch || approvedFilterYear || approvedFilterSection) && (
-                <button onClick={() => { setSelectedProgram("all"); setApprovedFilterYear(''); setApprovedFilterSection(''); setApprovedSearch(''); }}
-                  className="text-sm font-semibold px-4 py-2 rounded-lg border transition hover:bg-gray-50"
-                  style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>Clear All</button>
-              )}
-            </div>
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-500">Approved Enrollments</p>
-              <p className="text-xs text-gray-400">{list.length} results</p>
-            </div>
-            {list.length === 0 ? (
-              <div className="px-6 py-10 text-center text-gray-400 text-sm">No approved enrollments found.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="border-b border-gray-100 bg-gray-50/60">
-                    <tr>
-                      {[["studentId","Student ID"],["studentName","Name"],["courseCode","Course"],["programId","Program"],["professorName","Professor"],[null,"Status"],[null,"Actions"]].map(([k,h]) => (
-                        <th key={h} className={thClass + (k ? " cursor-pointer hover:text-gray-600" : "")} onClick={() => k && handleSort(k)}>{h}{k ? sortIcon(k) : ''}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {sortList(list).map(e => (
-                      <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className={tdClass}>{e.studentId}</td>
-                        <td className={tdClass + " font-medium"}>{e.studentName}</td>
-                        <td className={tdClass}>
-                          <span className="font-semibold text-gray-900">{e.courseCode}</span>
-                          <br /><span className="text-xs text-gray-400">{e.courseTitle}</span>
-                        </td>
-                        <td className={tdClass}>{e.programId}-{e.yearLevel}{e.section}</td>
-                        <td className={tdClass}>{e.professorName}</td>
-                        <td className={tdClass}>
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-800">Enrolled</span>
-                        </td>
-                        <td className={tdClass}>
-                          <button onClick={() => dropEnrollment(e.id)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-red-50"
-                            style={{ borderColor: "#fca5a5", color: "#dc2626" }}>Drop</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-          </div>
-          );
-        })()}
 
         {activeTab === "assignments" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
