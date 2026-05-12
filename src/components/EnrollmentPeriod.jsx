@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import ConfirmDialog from './ConfirmDialog';
+import Toast from './Toast';
 
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
@@ -27,10 +29,13 @@ const EnrollmentPeriod = () => {
   const [editingPeriod, setEditingPeriod] = useState(null);
   const [availableSemesters, setAvailableSemesters] = useState([]);
   const [formData, setFormData] = useState({
-    semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true
+    term: '', startYear: new Date().getFullYear(), endYear: new Date().getFullYear() + 1, startDate: '', endDate: '', isActive: true, autoToggle: true
   });
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
 
-  const emptyForm = { semester: '', startDate: '', endDate: '', isActive: true, autoToggle: true };
+  const emptyForm = { term: '', startYear: new Date().getFullYear(), endYear: new Date().getFullYear() + 1, startDate: '', endDate: '', isActive: true, autoToggle: true };
 
   // Wrapped in useCallback so it has a stable reference for useEffect deps
   const fetchData = useCallback(async () => {
@@ -82,11 +87,18 @@ const EnrollmentPeriod = () => {
     e.preventDefault();
     setSaving(true);
     try {
+      if (Number(formData.endYear) !== Number(formData.startYear) + 1) {
+        setToast({ message: 'Academic years must be exactly 1 year apart (e.g., 2024-2025).', type: 'error' }); 
+        setSaving(false); return;
+      }
+      
+      const assembledSemester = `${formData.term} ${formData.startYear}-${formData.endYear}`;
+
       if (new Date(formData.startDate) > new Date(formData.endDate)) {
         alert('End date must be after start date'); setSaving(false); return;
       }
       const exists = enrollmentPeriods.some(p =>
-        p.semester === formData.semester && (!editingPeriod || p.id !== editingPeriod.id)
+        p.semester === assembledSemester && (!editingPeriod || p.id !== editingPeriod.id)
       );
       if (exists) {
         alert('An enrollment period already exists for this semester.'); setSaving(false); return;
@@ -97,42 +109,72 @@ const EnrollmentPeriod = () => {
         : formData.isActive;
 
       const data = {
-        semester: formData.semester, startDate: formData.startDate, endDate: formData.endDate,
+        semester: assembledSemester, startDate: formData.startDate, endDate: formData.endDate,
         autoToggle: formData.autoToggle, isActive: shouldBeActive, updatedAt: new Date()
       };
 
       if (editingPeriod) {
         await setDoc(doc(db, 'enrollmentPeriods', editingPeriod.id), { ...data, createdAt: editingPeriod.createdAt });
+        setToast({ message: 'Enrollment period updated!', type: 'success' });
       } else {
-        await setDoc(doc(db, 'enrollmentPeriods', formData.semester.replace(/\s+/g, '-')), { ...data, createdAt: new Date() });
+        await setDoc(doc(db, 'enrollmentPeriods', assembledSemester.replace(/\s+/g, '-')), { ...data, createdAt: new Date() });
+        setToast({ message: 'Enrollment period created!', type: 'success' });
+        setShowCreateForm(false);
       }
 
       setFormData(emptyForm); setEditingPeriod(null); fetchData();
-    } catch (e) { alert('Error saving settings'); }
+    } catch (e) { setToast({ message: 'Error saving settings', type: 'error' }); }
     setSaving(false);
   };
 
   const handleEdit = (period) => {
     setEditingPeriod(period);
-    setFormData({ semester: period.semester, startDate: period.startDate, endDate: period.endDate, isActive: period.isActive, autoToggle: period.autoToggle });
+    
+    let term = '';
+    let startYear = new Date().getFullYear();
+    let endYear = new Date().getFullYear() + 1;
+    
+    const match = period.semester.match(/(.+) (\d{4})-(\d{4})/);
+    if (match) {
+      term = match[1];
+      startYear = parseInt(match[2]);
+      endYear = parseInt(match[3]);
+    }
+    
+    setFormData({ term, startYear, endYear, startDate: period.startDate, endDate: period.endDate, isActive: period.isActive, autoToggle: period.autoToggle });
+    setShowCreateForm(true);
   };
 
-  const handleCancelEdit = () => { setEditingPeriod(null); setFormData(emptyForm); };
+  const handleCancelEdit = () => { setEditingPeriod(null); setFormData(emptyForm); setShowCreateForm(false); };
 
   const handleToggleActive = async (period) => {
-    if (period.autoToggle) { alert('Auto-toggle is enabled. Edit the period to disable it first.'); return; }
-    try {
-      await setDoc(doc(db, 'enrollmentPeriods', period.id), { ...period, isActive: !period.isActive, updatedAt: new Date() });
-      fetchData();
-    } catch (e) { alert('Error updating status'); }
+    if (period.autoToggle) { setToast({ message: 'Auto-toggle is enabled. Edit the period to disable it first.', type: 'info' }); return; }
+    setConfirmDialog({
+      isOpen: true, title: period.isActive ? 'Close Enrollment' : 'Open Enrollment',
+      message: `${period.isActive ? 'Close' : 'Open'} enrollment for ${period.semester}?`, danger: period.isActive,
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          await setDoc(doc(db, 'enrollmentPeriods', period.id), { ...period, isActive: !period.isActive, updatedAt: new Date() });
+          fetchData();
+        } catch (e) { setToast({ message: 'Error updating status', type: 'error' }); }
+      }
+    });
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this enrollment period?')) return;
-    try {
-      await setDoc(doc(db, 'enrollmentPeriods', id), { deleted: true, deletedAt: new Date() });
-      fetchData();
-    } catch (e) { alert('Error deleting period'); }
+  const handleDelete = (id) => {
+    setConfirmDialog({
+      isOpen: true, title: 'Delete Enrollment Period', danger: true,
+      message: 'Delete this enrollment period? This cannot be undone.',
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          await setDoc(doc(db, 'enrollmentPeriods', id), { deleted: true, deletedAt: new Date() });
+          setToast({ message: 'Period deleted', type: 'success' });
+          fetchData();
+        } catch (e) { setToast({ message: 'Error deleting period', type: 'error' }); }
+      }
+    });
   };
 
   const getPeriodStatus = (period) => {
@@ -167,11 +209,19 @@ const EnrollmentPeriod = () => {
     <div className="p-6 space-y-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
       {/* Header */}
-      <div>
-        <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-          Enrollment Period Management
-        </h2>
-        <p className="text-sm text-gray-400 mt-0.5">Set enrollment dates per semester</p>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+            Enrollment Period Management
+          </h2>
+          <p className="text-sm text-gray-400 mt-0.5">Set enrollment dates per semester</p>
+        </div>
+        <button
+          onClick={() => { setShowCreateForm(v => !v); if (showCreateForm) handleCancelEdit(); }}
+          className="text-sm font-semibold px-5 py-2.5 rounded-full transition"
+          style={showCreateForm ? { background: "#f3f4f6", color: "#6b7280" } : { background: NAVY, color: "#fff" }}>
+          {showCreateForm ? '✕ Cancel' : '+ Add Enrollment Period'}
+        </button>
       </div>
 
       {/* Status banner */}
@@ -194,79 +244,83 @@ const EnrollmentPeriod = () => {
           ))}
         </div>
       </div>
-
-      {/* Form */}
-      <div className="rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100" style={{ background: `${NAVY}08` }}>
-          <p className="text-sm font-semibold text-gray-600">
-            {editingPeriod ? `Editing: ${editingPeriod.semester}` : 'Create Enrollment Period'}
-          </p>
-        </div>
-        <form onSubmit={handleSave} className="p-5 space-y-5">
-
-          {/* Semester */}
-          <div>
-            <label className={labelClass}>Semester *</label>
-            <select name="semester" value={formData.semester} onChange={handleInputChange}
-              className={inputClass} required disabled={!!editingPeriod}>
-              <option value="">Select Semester</option>
-              {availableSemesters.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+      {/* Form Modal */}
+      {showCreateForm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
+              {editingPeriod ? `Edit: ${editingPeriod.semester}` : 'Create Enrollment Period'}
+            </h2>
+            <button onClick={handleCancelEdit} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
           </div>
-
-          {/* Date range */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Start Date & Time *</label>
-              <input type="datetime-local" name="startDate" value={formData.startDate}
-                onChange={handleInputChange} className={inputClass} required />
-            </div>
-            <div>
-              <label className={labelClass}>End Date & Time *</label>
-              <input type="datetime-local" name="endDate" value={formData.endDate}
-                onChange={handleInputChange} className={inputClass} required />
-            </div>
-          </div>
-
-          {/* Toggles */}
-          <div className="space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" name="autoToggle" checked={formData.autoToggle}
-                onChange={handleInputChange}
-                className="mt-0.5 w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+          <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <p className="text-sm font-medium text-gray-700">Auto-toggle enrollment based on dates</p>
-                <p className="text-xs text-gray-400 mt-0.5">Automatically opens/closes when start/end dates are reached — recommended</p>
+                <label className={labelClass}>Semester *</label>
+                <select name="term" value={formData.term} onChange={handleInputChange}
+                  className={inputClass} required disabled={!!editingPeriod}>
+                  <option value="">Select Term</option>
+                  <option value="1st Sem">1st Sem</option>
+                  <option value="2nd Sem">2nd Sem</option>
+                  <option value="Summer">Summer</option>
+                </select>
               </div>
-            </label>
-
-            {!formData.autoToggle && (
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" name="isActive" checked={formData.isActive}
+              <div>
+                <label className={labelClass}>Start Year *</label>
+                <input type="number" name="startYear" value={formData.startYear} onChange={handleInputChange}
+                  className={inputClass} required disabled={!!editingPeriod} min="2000" max="2100" />
+              </div>
+              <div>
+                <label className={labelClass}>End Year *</label>
+                <input type="number" name="endYear" value={formData.endYear} onChange={handleInputChange}
+                  className={inputClass} required disabled={!!editingPeriod} min="2000" max="2100" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Start Date & Time *</label>
+                <input type="datetime-local" name="startDate" value={formData.startDate}
+                  onChange={handleInputChange} className={inputClass} required />
+              </div>
+              <div>
+                <label className={labelClass}>End Date & Time *</label>
+                <input type="datetime-local" name="endDate" value={formData.endDate}
+                  onChange={handleInputChange} className={inputClass} required />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" name="autoToggle" checked={formData.autoToggle}
                   onChange={handleInputChange}
-                  className="w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
-                <p className="text-sm font-medium text-gray-700">Manually set as active now</p>
+                  className="mt-0.5 w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Auto-toggle enrollment based on dates</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Automatically opens/closes when start/end dates are reached — recommended</p>
+                </div>
               </label>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-1">
-            <button type="submit" disabled={saving}
-              className="px-6 py-2.5 rounded-full text-sm font-semibold transition disabled:opacity-50"
-              style={{ background: NAVY, color: "#fff" }}>
-              {saving ? 'Saving…' : editingPeriod ? 'Update Period' : 'Create Period'}
-            </button>
-            {editingPeriod && (
+              {!formData.autoToggle && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" name="isActive" checked={formData.isActive}
+                    onChange={handleInputChange}
+                    className="w-4 h-4 rounded cursor-pointer" style={{ accentColor: NAVY }} />
+                  <p className="text-sm font-medium text-gray-700">Manually set as active now</p>
+                </label>
+              )}
+            </div>
+            <div className="flex gap-3 pt-1">
               <button type="button" onClick={handleCancelEdit}
-                className="px-6 py-2.5 rounded-full text-sm font-semibold border transition hover:bg-gray-50"
-                style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
-                Cancel
+                className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition disabled:opacity-50"
+                style={{ background: NAVY }}>
+                {saving ? 'Saving…' : editingPeriod ? 'Update Period' : 'Create Period'}
               </button>
-            )}
-          </div>
-        </form>
+            </div>
+          </form>
+        </div>
       </div>
+      )}
 
       {/* Periods list */}
       <div className="rounded-2xl border border-gray-100 overflow-hidden">
@@ -304,7 +358,7 @@ const EnrollmentPeriod = () => {
                         <p>Start: {new Date(period.startDate).toLocaleString()}</p>
                         <p>End: {new Date(period.endDate).toLocaleString()}</p>
                         {period.lastAutoUpdate && (
-                          <p className="text-gray-300">
+                          <p className="text-gray-400">
                             Last auto-update: {new Date(period.lastAutoUpdate.seconds * 1000).toLocaleString()}
                           </p>
                         )}
@@ -360,6 +414,11 @@ const EnrollmentPeriod = () => {
           ))}
         </div>
       </div>
+
+      <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
+        danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(d => ({ ...d, isOpen: false }))} />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };
