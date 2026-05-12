@@ -27,7 +27,6 @@ const EnrollmentPeriod = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(null);
-  const [availableSemesters, setAvailableSemesters] = useState([]);
   const [formData, setFormData] = useState({
     term: '', startYear: new Date().getFullYear(), endYear: new Date().getFullYear() + 1, startDate: '', endDate: '', isActive: true, autoToggle: true
   });
@@ -40,13 +39,7 @@ const EnrollmentPeriod = () => {
   // Wrapped in useCallback so it has a stable reference for useEffect deps
   const fetchData = useCallback(async () => {
     try {
-      const [assignSnap, periodsSnap] = await Promise.all([
-        getDocs(collection(db, 'classAssignments')),
-        getDocs(collection(db, 'enrollmentPeriods')),
-      ]);
-      const sems = new Set();
-      assignSnap.docs.forEach(d => sems.add(d.data().semester));
-      setAvailableSemesters(Array.from(sems).sort().reverse());
+      const periodsSnap = await getDocs(collection(db, 'enrollmentPeriods'));
 
       const periods = periodsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       setEnrollmentPeriods(periods.filter(p => !p.deleted));

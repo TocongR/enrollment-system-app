@@ -1,5 +1,5 @@
 // src/components/ManageClassAssignments.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc
 } from 'firebase/firestore';
@@ -33,9 +33,7 @@ const ManageClassAssignments = () => {
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [availableSemesters, setAvailableSemesters] = useState([]);
 
-  useEffect(() => { fetchData(); }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [progSnap, courseSnap, profSnap, assignSnap, periodsSnap] = await Promise.all([
         getDocs(collection(db, 'programs')),
@@ -56,11 +54,13 @@ const ManageClassAssignments = () => {
       setAvailableSemesters(semsArr);
       
       if (semsArr.length > 0) {
-        if (!selectedSemester) setSelectedSemester(semsArr[0]);
-        if (!filterSemester) setFilterSemester(semsArr[0]);
+        setSelectedSemester(prev => prev || semsArr[0]);
+        setFilterSemester(prev => prev || semsArr[0]);
       }
     } catch (e) { console.error(e); }
-  };
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const resetForm = () => {
     setSelectedProgram(''); setSelectedYear('1'); setSelectedSection('A');
