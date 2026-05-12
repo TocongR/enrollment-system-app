@@ -12,6 +12,7 @@ import ManageStudents from "./ManageStudents";
 import EnrollmentPeriod from "./EnrollmentPeriod";
 import ManageCourses from "./ManageCourses";
 import ManageProfessors from "./ManageProfessors";
+import ManagePrograms from "./ManagePrograms";
 import ConfirmDialog from "./ConfirmDialog";
 import Toast from "./Toast";
 
@@ -158,6 +159,7 @@ const AdminDashboard = () => {
     { key: "students",     label: "Manage Students", icon: "👤" },
     { key: "courses",      label: "Manage Courses", icon: "📖" },
     { key: "professors",   label: "Manage Professors", icon: "🎓" },
+    { key: "programs",      label: "Manage Programs", icon: "🏫" },
     { key: "period",       label: "Enrollment Period", icon: "📅" },
   ];
 
@@ -531,6 +533,11 @@ const AdminDashboard = () => {
         {activeTab === "professors" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <ManageProfessors />
+          </div>
+        )}
+        {activeTab === "programs" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <ManagePrograms />
           </div>
         )}
         {activeTab === "period" && (
