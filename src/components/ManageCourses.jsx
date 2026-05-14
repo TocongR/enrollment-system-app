@@ -12,7 +12,6 @@ const ManageCourses = () => {
   const [courses, setCourses] = useState([]);
   const [enrollmentCounts, setEnrollmentCounts] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingCourse, setEditingCourse] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
@@ -41,7 +40,6 @@ const ManageCourses = () => {
 
   const resetForm = () => {
     setFormData({ code: '', title: '', units: 3, description: '', prerequisites: [] });
-    setEditingCourse(null);
   };
 
   const handleSave = async (e) => {
@@ -52,27 +50,14 @@ const ManageCourses = () => {
         units: parseInt(formData.units), description: formData.description,
         prerequisites: formData.prerequisites, updatedAt: new Date()
       };
-      if (editingCourse) {
-        await setDoc(doc(db, 'courses', editingCourse.id), { ...data, createdAt: editingCourse.createdAt || new Date() });
-        setToast({ message: 'Course updated successfully!', type: 'success' });
-        setEditingCourse(null);
-      } else {
-        await setDoc(doc(db, 'courses', formData.code.toUpperCase()), { ...data, createdAt: new Date() });
-        setToast({ message: 'Course added successfully!', type: 'success' });
-        setShowAddModal(false);
-      }
+      await setDoc(doc(db, 'courses', formData.code.toUpperCase()), { ...data, createdAt: new Date() });
+      setToast({ message: 'Course added successfully!', type: 'success' });
+      setShowAddModal(false);
       resetForm();
       fetchCourses();
     } catch (e) { setToast({ message: 'Error saving course', type: 'error' }); }
   };
 
-  const handleEdit = (course) => {
-    setEditingCourse(course);
-    setFormData({
-      code: course.code, title: course.title, units: course.units,
-      description: course.description || '', prerequisites: course.prerequisites || []
-    });
-  };
 
   const handleDelete = (course) => {
     setConfirmDialog({
@@ -107,14 +92,14 @@ const ManageCourses = () => {
   const labelClass = "block text-xs font-medium text-gray-400 mb-1.5";
   const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 text-gray-700";
 
-  const renderModal = (isEdit) => (
+  const renderModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-            {isEdit ? `Edit Course: ${editingCourse?.code}` : 'Add New Course'}
+            Add New Course
           </h2>
-          <button onClick={() => { isEdit ? setEditingCourse(null) : setShowAddModal(false); resetForm(); }}
+          <button onClick={() => { setShowAddModal(false); resetForm(); }}
             className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
         <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
@@ -122,7 +107,7 @@ const ManageCourses = () => {
             <div>
               <label className={labelClass}>Course Code *</label>
               <input type="text" value={formData.code} onChange={e => setFormData(p => ({ ...p, code: e.target.value }))}
-                className={inputClass} placeholder="e.g. CS101" required disabled={isEdit} />
+                className={inputClass} placeholder="e.g. CS101" required />
             </div>
             <div className="col-span-2">
               <label className={labelClass}>Course Title *</label>
@@ -159,11 +144,11 @@ const ManageCourses = () => {
             </div>
           </div>
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => { isEdit ? setEditingCourse(null) : setShowAddModal(false); resetForm(); }}
+            <button type="button" onClick={() => { setShowAddModal(false); resetForm(); }}
               className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
             <button type="submit"
               className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition"
-              style={{ background: NAVY }}>{isEdit ? 'Update Course' : 'Add Course'}</button>
+              style={{ background: NAVY }}>Add Course</button>
           </div>
         </form>
       </div>
@@ -234,14 +219,9 @@ const ManageCourses = () => {
                         ) : <span className="text-xs text-gray-400">None</span>}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <div className="flex gap-2">
-                          <button onClick={() => handleEdit(c)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
-                            style={{ borderColor: "#e5e7eb", color: "#374151" }}>Edit</button>
-                          <button onClick={() => handleDelete(c)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
-                            style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
-                        </div>
+                        <button onClick={() => handleDelete(c)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                          style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -252,8 +232,7 @@ const ManageCourses = () => {
         </div>
       </div>
 
-      {showAddModal && renderModal(false)}
-      {editingCourse && renderModal(true)}
+      {showAddModal && renderModal()}
 
       <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
         danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}

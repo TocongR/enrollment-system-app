@@ -17,14 +17,10 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
-    const studentIdRegex = /^\d{4}-\d{4}-[A-Z]$/;
-    const u = username.toUpperCase();
-    const isStudentId = studentIdRegex.test(u);
-    const isAdmin = u.startsWith('ADMIN');
-    const isProf = u.startsWith('PROF');
+    const u = username.toUpperCase().replace(/\s+/g, '');
 
-    if (!isStudentId && !isAdmin && !isProf) {
-      setError('Invalid username format.');
+    if (!u) {
+      setError('Please enter your username.');
       return;
     }
 

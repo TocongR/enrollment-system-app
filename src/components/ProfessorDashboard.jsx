@@ -18,7 +18,7 @@ const ProfessorDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('1st Sem 2024-2025');
+  const [selectedSemester, setSelectedSemester] = useState('');
   const [selectedProgram, setSelectedProgram] = useState('all');
   const [selectedCourse, setSelectedCourse] = useState('all');
   const [availableSemesters, setAvailableSemesters] = useState([]);
@@ -31,7 +31,9 @@ const ProfessorDashboard = () => {
       const snap = await getDocs(collection(db, 'classAssignments'));
       const sems = new Set();
       snap.docs.forEach(d => sems.add(d.data().semester));
-      setAvailableSemesters(Array.from(sems).sort().reverse());
+      const semsArr = Array.from(sems).sort().reverse();
+      setAvailableSemesters(semsArr);
+      setSelectedSemester(prev => prev || (semsArr.length > 0 ? semsArr[0] : ''));
 
       const progSnap = await getDocs(collection(db, 'programs'));
       setAvailablePrograms(progSnap.docs.map(d => ({ id: d.id, ...d.data() })));

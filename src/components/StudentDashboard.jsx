@@ -47,7 +47,7 @@ const StudentDashboard = () => {
   const [showDropModal, setShowDropModal] = useState(false);
   const [selectedDropCourse, setSelectedDropCourse] = useState(null);
   const [enrollmentPeriodOpen, setEnrollmentPeriodOpen] = useState(false);
-  const [selectedSemester, setSelectedSemester] = useState("1st Sem 2024-2025");
+  const [selectedSemester, setSelectedSemester] = useState("");
   const [activeTab, setActiveTab] = useState("enroll");
   const [availableSemesters, setAvailableSemesters] = useState([]);
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
@@ -63,7 +63,9 @@ const StudentDashboard = () => {
       const snap = await getDocs(collection(db, "classAssignments"));
       const sems = new Set();
       snap.docs.forEach(d => sems.add(d.data().semester));
-      setAvailableSemesters(Array.from(sems).sort().reverse());
+      const semsArr = Array.from(sems).sort().reverse();
+      setAvailableSemesters(semsArr);
+      setSelectedSemester(prev => prev || (semsArr.length > 0 ? semsArr[0] : ''));
     } catch (e) { console.error(e); }
   }, []);
 

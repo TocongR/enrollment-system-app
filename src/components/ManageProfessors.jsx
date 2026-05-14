@@ -1,6 +1,6 @@
 // src/components/ManageProfessors.jsx
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db } from '../firebase/config';
 import { secondaryAuth } from '../firebase/secondaryAuth';
@@ -9,18 +9,9 @@ import Toast from './Toast';
 
 const NAVY = "#1a3a6b";
 
-// Auto-password: fullname lowercase no spaces + number code from PROF-XXX
-const generateProfPassword = (fullName, professorId) => {
-  const namePart = fullName.replace(/\s+/g, '').toLowerCase();
-  const parts = professorId.split('-');
-  const codePart = parts.length >= 2 ? parts[1] : '';
-  return `${namePart}${codePart}`;
-};
-
 const ManageProfessors = () => {
   const [professors, setProfessors] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingProf, setEditingProf] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -36,17 +27,19 @@ const ManageProfessors = () => {
     } catch (e) { console.error(e); }
   };
 
-  const generatedPassword = generateProfPassword(formData.fullName, formData.professorId);
+  // Password = professor code, Username = FULLNAME uppercase no spaces
+  const generatedPassword = formData.professorId || '';
+  const generatedUsername = formData.fullName.replace(/\s+/g, '').toUpperCase();
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    if (!generatedPassword || generatedPassword.length < 6) {
-      setToast({ message: 'Please fill in the full name and professor ID', type: 'error' });
+    if (!formData.professorId || formData.professorId.length < 6) {
+      setToast({ message: 'Please fill in a valid professor ID (min 6 characters)', type: 'error' });
       return;
     }
     setLoading(true);
     try {
-      const email = `${formData.professorId}@enrollment.system`;
+      const email = `${generatedUsername}@enrollment.system`;
       const cred = await createUserWithEmailAndPassword(secondaryAuth, email, generatedPassword);
       await setDoc(doc(db, 'users', cred.user.uid), {
         studentId: formData.professorId, fullName: formData.fullName,
@@ -60,21 +53,6 @@ const ManageProfessors = () => {
     setLoading(false);
   };
 
-  const handleEdit = (prof) => {
-    setEditingProf(prof);
-    setFormData({ professorId: prof.studentId, fullName: prof.fullName });
-  };
-
-  const handleUpdate = async (e) => {
-    e.preventDefault();
-    try {
-      await updateDoc(doc(db, 'users', editingProf.id), { fullName: formData.fullName });
-      setToast({ message: 'Professor updated!', type: 'success' });
-      setEditingProf(null);
-      setFormData({ professorId: '', fullName: '' });
-      fetchProfessors();
-    } catch (e) { setToast({ message: 'Error updating', type: 'error' }); }
-  };
 
   const handleDelete = (prof) => {
     setConfirmDialog({
@@ -99,23 +77,22 @@ const ManageProfessors = () => {
   const labelClass = "block text-xs font-medium text-gray-400 mb-1.5";
   const inputClass = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 text-gray-700";
 
-  // Shared modal content for Add/Edit
-  const renderModal = (isEdit) => (
+  const renderModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-dialogIn">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-            {isEdit ? 'Edit Professor' : 'Add New Professor'}
+            Add New Professor
           </h2>
-          <button onClick={() => { isEdit ? setEditingProf(null) : setShowAddModal(false); setFormData({ professorId: '', fullName: '' }); }}
+          <button onClick={() => { setShowAddModal(false); setFormData({ professorId: '', fullName: '' }); }}
             className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
-        <form onSubmit={isEdit ? handleUpdate : handleAdd} className="px-6 py-5 space-y-4">
+        <form onSubmit={handleAdd} className="px-6 py-5 space-y-4">
           <div>
             <label className={labelClass}>Professor ID *</label>
             <input type="text" value={formData.professorId}
               onChange={e => setFormData(p => ({ ...p, professorId: e.target.value.toUpperCase() }))}
-              className={inputClass} placeholder="e.g. PROF-003" required disabled={isEdit} />
+              className={inputClass} placeholder="e.g. PROF-003" required />
           </div>
           <div>
             <label className={labelClass}>Full Name *</label>
@@ -123,20 +100,24 @@ const ManageProfessors = () => {
               onChange={e => setFormData(p => ({ ...p, fullName: e.target.value }))}
               className={inputClass} placeholder="e.g. Mario Esperanza" required />
           </div>
-          {!isEdit && (
-            <div>
-              <label className={labelClass}>Initial Password (auto-generated)</label>
-              <input type="text" value={generatedPassword} disabled
-                className={inputClass + " bg-gray-50 text-gray-500 font-mono"} />
-              <p className="text-xs text-gray-400 mt-1">Format: fullname (lowercase, no spaces) + number code</p>
-            </div>
-          )}
+          <div>
+            <label className={labelClass}>Username (auto-generated)</label>
+            <input type="text" value={generatedUsername} disabled
+              className={inputClass + " bg-gray-50 text-gray-500 font-mono"} />
+            <p className="text-xs text-gray-400 mt-1">Format: Full name in uppercase without spaces</p>
+          </div>
+          <div>
+            <label className={labelClass}>Initial Password (auto-generated)</label>
+            <input type="text" value={generatedPassword} disabled
+              className={inputClass + " bg-gray-50 text-gray-500 font-mono"} />
+            <p className="text-xs text-gray-400 mt-1">Password is the Professor ID</p>
+          </div>
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={() => { isEdit ? setEditingProf(null) : setShowAddModal(false); setFormData({ professorId: '', fullName: '' }); }}
+            <button type="button" onClick={() => { setShowAddModal(false); setFormData({ professorId: '', fullName: '' }); }}
               className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
             <button type="submit" disabled={loading}
               className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition disabled:opacity-50"
-              style={{ background: NAVY }}>{loading ? 'Saving…' : isEdit ? 'Update Professor' : 'Add Professor'}</button>
+              style={{ background: NAVY }}>{loading ? 'Saving…' : 'Add Professor'}</button>
           </div>
         </form>
       </div>
@@ -190,14 +171,9 @@ const ManageProfessors = () => {
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{p.studentId}</td>
                       <td className="px-4 py-3 text-sm text-gray-700">{p.fullName}</td>
                       <td className="px-4 py-3 text-sm">
-                        <div className="flex gap-2">
-                          <button onClick={() => handleEdit(p)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
-                            style={{ borderColor: "#e5e7eb", color: "#374151" }}>Edit</button>
-                          <button onClick={() => handleDelete(p)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
-                            style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
-                        </div>
+                        <button onClick={() => handleDelete(p)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                          style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -208,8 +184,7 @@ const ManageProfessors = () => {
         </div>
       </div>
 
-      {showAddModal && renderModal(false)}
-      {editingProf && renderModal(true)}
+      {showAddModal && renderModal()}
 
       <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
         danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}

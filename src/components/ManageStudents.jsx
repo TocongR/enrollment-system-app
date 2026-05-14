@@ -1,7 +1,7 @@
 // src/components/ManageStudents.jsx
 import { useState, useEffect } from 'react';
 import {
-  collection, query, where, getDocs, doc, deleteDoc, setDoc, updateDoc
+  collection, query, where, getDocs, doc, deleteDoc, setDoc
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db } from '../firebase/config';
@@ -12,14 +12,6 @@ import Toast from './Toast';
 const NAVY = "#1a3a6b";
 const GOLD = "#f0c040";
 
-// Generate auto-password: firstname + middleinitial + lastname (lowercase, no spaces) + second code of student id
-const generatePassword = (firstName, middleInitial, lastName, studentId) => {
-  const namePart = `${firstName}${middleInitial}${lastName}`.replace(/\s+/g, '').toLowerCase();
-  const parts = studentId.split('-');
-  const codePart = parts.length >= 2 ? parts[1] : '';
-  return `${namePart}${codePart}`;
-};
-
 const ManageStudents = () => {
   const [students, setStudents] = useState([]);
   const [programs, setPrograms] = useState([]);
@@ -28,15 +20,10 @@ const ManageStudents = () => {
   const [filterProgram, setFilterProgram] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingStudent, setEditingStudent] = useState(null);
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false });
   const [formData, setFormData] = useState({
-    studentId: '', firstName: '', middleInitial: '', lastName: '',
-    programId: '', yearLevel: '1', section: 'A'
-  });
-  const [editData, setEditData] = useState({
-    firstName: '', middleInitial: '', lastName: '',
+    studentId: '', firstName: '', lastName: '',
     programId: '', yearLevel: '1', section: 'A'
   });
 
@@ -53,14 +40,14 @@ const ManageStudents = () => {
     } catch (e) { console.error(e); }
   };
 
-  const generatedPassword = generatePassword(
-    formData.firstName, formData.middleInitial, formData.lastName, formData.studentId
-  );
+  // Password = student code, Username = FULLNAME uppercase no spaces
+  const generatedPassword = formData.studentId || '';
+  const generatedUsername = `${formData.firstName}${formData.lastName}`.replace(/\s+/g, '').toUpperCase();
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
-    if (!generatedPassword || generatedPassword.length < 6) {
-      setToast({ message: 'Please fill in all name fields and student ID', type: 'error' });
+    if (!formData.studentId || formData.studentId.length < 6) {
+      setToast({ message: 'Please fill in a valid student ID (min 6 characters)', type: 'error' });
       return;
     }
     setLoading(true);
@@ -68,56 +55,26 @@ const ManageStudents = () => {
       const program = programs.find(p => p.id === formData.programId);
       if (!program) { setToast({ message: 'Please select a program', type: 'error' }); setLoading(false); return; }
 
-      const fullName = `${formData.firstName} ${formData.middleInitial ? formData.middleInitial + '. ' : ''}${formData.lastName}`;
-      const email = `${formData.studentId}@enrollment.system`;
+      const fullName = `${formData.firstName} ${formData.lastName}`;
+      const email = `${generatedUsername}@enrollment.system`;
       const cred = await createUserWithEmailAndPassword(secondaryAuth, email, generatedPassword);
 
       await setDoc(doc(db, 'users', cred.user.uid), {
         studentId: formData.studentId, fullName,
-        firstName: formData.firstName, middleInitial: formData.middleInitial, lastName: formData.lastName,
+        firstName: formData.firstName, lastName: formData.lastName,
         role: 'student', programId: program.code, programName: program.name,
         yearLevel: parseInt(formData.yearLevel), section: formData.section,
         createdAt: new Date()
       });
 
       setShowAddModal(false);
-      setFormData({ studentId: '', firstName: '', middleInitial: '', lastName: '', programId: '', yearLevel: '1', section: 'A' });
+      setFormData({ studentId: '', firstName: '', lastName: '', programId: '', yearLevel: '1', section: 'A' });
       setToast({ message: 'Student added successfully!', type: 'success' });
       fetchData();
     } catch (e) { setToast({ message: `Error: ${e.message}`, type: 'error' }); }
     setLoading(false);
   };
 
-  const handleEditStudent = (student) => {
-    setEditingStudent(student);
-    setEditData({
-      firstName: student.firstName || student.fullName?.split(' ')[0] || '',
-      middleInitial: student.middleInitial || '',
-      lastName: student.lastName || student.fullName?.split(' ').slice(-1)[0] || '',
-      programId: programs.find(p => p.code === student.programId)?.id || '',
-      yearLevel: String(student.yearLevel),
-      section: student.section
-    });
-  };
-
-  const handleUpdateStudent = async (e) => {
-    e.preventDefault();
-    try {
-      const program = programs.find(p => p.id === editData.programId);
-      const fullName = `${editData.firstName} ${editData.middleInitial ? editData.middleInitial + '. ' : ''}${editData.lastName}`;
-      await updateDoc(doc(db, 'users', editingStudent.id), {
-        fullName,
-        firstName: editData.firstName, middleInitial: editData.middleInitial, lastName: editData.lastName,
-        programId: program ? program.code : editingStudent.programId,
-        programName: program ? program.name : editingStudent.programName,
-        yearLevel: parseInt(editData.yearLevel),
-        section: editData.section
-      });
-      setToast({ message: 'Student updated successfully!', type: 'success' });
-      setEditingStudent(null);
-      fetchData();
-    } catch (e) { setToast({ message: 'Error updating student', type: 'error' }); }
-  };
 
   const handleDeleteStudent = (studentId, uid) => {
     setConfirmDialog({
@@ -220,14 +177,9 @@ const ManageStudents = () => {
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">{s.yearLevel}{s.section}</span>
                       </td>
                       <td className={tdClass}>
-                        <div className="flex gap-2">
-                          <button onClick={() => handleEditStudent(s)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
-                            style={{ borderColor: "#e5e7eb", color: "#374151" }}>Edit</button>
-                          <button onClick={() => handleDeleteStudent(s.studentId, s.id)}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
-                            style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
-                        </div>
+                        <button onClick={() => handleDeleteStudent(s.studentId, s.id)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                          style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -252,16 +204,11 @@ const ManageStudents = () => {
                 <input type="text" value={formData.studentId} onChange={e => setFormData(p => ({ ...p, studentId: e.target.value.toUpperCase() }))}
                   className={inputClass} placeholder="e.g. 2024-1234-A" required />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>First Name *</label>
                   <input type="text" value={formData.firstName} onChange={e => setFormData(p => ({ ...p, firstName: e.target.value }))}
                     className={inputClass} placeholder="Juan" required />
-                </div>
-                <div>
-                  <label className={labelClass}>Middle Initial</label>
-                  <input type="text" value={formData.middleInitial} onChange={e => setFormData(p => ({ ...p, middleInitial: e.target.value.slice(0, 2) }))}
-                    className={inputClass} placeholder="M" maxLength={2} />
                 </div>
                 <div>
                   <label className={labelClass}>Last Name *</label>
@@ -270,10 +217,16 @@ const ManageStudents = () => {
                 </div>
               </div>
               <div>
+                <label className={labelClass}>Username (auto-generated)</label>
+                <input type="text" value={generatedUsername} disabled
+                  className={inputClass + " bg-gray-50 text-gray-500 font-mono"} />
+                <p className="text-xs text-gray-400 mt-1">Format: Full name in uppercase without spaces</p>
+              </div>
+              <div>
                 <label className={labelClass}>Initial Password (auto-generated)</label>
                 <input type="text" value={generatedPassword} disabled
                   className={inputClass + " bg-gray-50 text-gray-500 font-mono"} />
-                <p className="text-xs text-gray-400 mt-1">Format: firstname + middleinitial + lastname + studentid-code (all lowercase)</p>
+                <p className="text-xs text-gray-400 mt-1">Password is the Student ID</p>
               </div>
               <div>
                 <label className={labelClass}>Program *</label>
@@ -311,65 +264,6 @@ const ManageStudents = () => {
         </div>
       )}
 
-      {/* Edit Student Modal */}
-      {editingStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(0,0,0,0.4)" }}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>Edit Student</h2>
-              <button onClick={() => setEditingStudent(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
-            </div>
-            <form onSubmit={handleUpdateStudent} className="px-6 py-5 space-y-4">
-              <div>
-                <label className={labelClass}>Student ID</label>
-                <input type="text" value={editingStudent.studentId} disabled className={inputClass + " bg-gray-50"} />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={labelClass}>First Name *</label>
-                  <input type="text" value={editData.firstName} onChange={e => setEditData(p => ({ ...p, firstName: e.target.value }))}
-                    className={inputClass} required />
-                </div>
-                <div>
-                  <label className={labelClass}>Middle Initial</label>
-                  <input type="text" value={editData.middleInitial} onChange={e => setEditData(p => ({ ...p, middleInitial: e.target.value.slice(0, 2) }))}
-                    className={inputClass} maxLength={2} />
-                </div>
-                <div>
-                  <label className={labelClass}>Last Name *</label>
-                  <input type="text" value={editData.lastName} onChange={e => setEditData(p => ({ ...p, lastName: e.target.value }))}
-                    className={inputClass} required />
-                </div>
-              </div>
-              <div>
-                <label className={labelClass}>Program *</label>
-                <select value={editData.programId} onChange={e => setEditData(p => ({ ...p, programId: e.target.value }))} className={inputClass} required>
-                  <option value="">Select Program</option>
-                  {programs.map(p => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>Year Level *</label>
-                  <select value={editData.yearLevel} onChange={e => setEditData(p => ({ ...p, yearLevel: e.target.value }))} className={inputClass} required>
-                    {["1","2","3","4"].map((y, i) => <option key={y} value={y}>{["1st","2nd","3rd","4th"][i]} Year</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClass}>Section *</label>
-                  <select value={editData.section} onChange={e => setEditData(p => ({ ...p, section: e.target.value }))} className={inputClass} required>
-                    {["A","B","C","D"].map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => setEditingStudent(null)} className="flex-1 py-2.5 rounded-full border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
-                <button type="submit" className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition" style={{ background: NAVY }}>Update Student</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message}
         danger={confirmDialog.danger} onConfirm={confirmDialog.onConfirm}

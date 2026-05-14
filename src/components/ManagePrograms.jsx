@@ -1,7 +1,7 @@
 // src/components/ManagePrograms.jsx
 import { useState, useEffect } from 'react';
 import {
-  collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where
+  collection, getDocs, addDoc, deleteDoc, doc, query, where
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import ConfirmDialog from './ConfirmDialog';
@@ -15,7 +15,6 @@ const ManagePrograms = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [editingProgram, setEditingProgram] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({ code: '', name: '', description: '', totalYears: 4 });
   const [toast, setToast] = useState(null);
@@ -62,9 +61,7 @@ const ManagePrograms = () => {
       }
 
       // Check for duplicate code
-      const duplicate = programs.some(p =>
-        p.code === formData.code.trim() && (!editingProgram || p.id !== editingProgram.id)
-      );
+      const duplicate = programs.some(p => p.code === formData.code.trim());
       if (duplicate) {
         setToast({ message: `Program code "${formData.code}" already exists.`, type: 'error' });
         setSaving(false); return;
@@ -77,16 +74,10 @@ const ManagePrograms = () => {
         totalYears: formData.totalYears || 4,
       };
 
-      if (editingProgram) {
-        await updateDoc(doc(db, 'programs', editingProgram.id), { ...data, updatedAt: new Date() });
-        setToast({ message: `Program "${data.code}" updated!`, type: 'success' });
-      } else {
-        await addDoc(collection(db, 'programs'), { ...data, createdAt: new Date() });
-        setToast({ message: `Program "${data.code}" created!`, type: 'success' });
-      }
+      await addDoc(collection(db, 'programs'), { ...data, createdAt: new Date() });
+      setToast({ message: `Program "${data.code}" created!`, type: 'success' });
 
       setFormData(emptyForm);
-      setEditingProgram(null);
       setShowModal(false);
       fetchData();
     } catch (e) {
@@ -96,16 +87,6 @@ const ManagePrograms = () => {
     setSaving(false);
   };
 
-  const handleEdit = (program) => {
-    setEditingProgram(program);
-    setFormData({
-      code: program.code || '',
-      name: program.name || '',
-      description: program.description || '',
-      totalYears: program.totalYears || 4,
-    });
-    setShowModal(true);
-  };
 
   const handleDelete = (program) => {
     const studentCount = enrolledCounts[program.code] || 0;
@@ -126,7 +107,6 @@ const ManagePrograms = () => {
   };
 
   const handleCancel = () => {
-    setEditingProgram(null);
     setFormData(emptyForm);
     setShowModal(false);
   };
@@ -219,14 +199,9 @@ const ManagePrograms = () => {
                       <span className="font-semibold" style={{ color: NAVY }}>{enrolledCounts[p.code] || 0}</span>
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      <div className="flex gap-2">
-                        <button onClick={() => handleEdit(p)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full border transition hover:bg-gray-50"
-                          style={{ borderColor: "#e5e7eb", color: "#374151" }}>Edit</button>
-                        <button onClick={() => handleDelete(p)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
-                          style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
-                      </div>
+                      <button onClick={() => handleDelete(p)}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                        style={{ background: "#fee2e2", color: "#dc2626" }}>Delete</button>
                     </td>
                   </tr>
                 ))}
@@ -242,7 +217,7 @@ const ManagePrograms = () => {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-dialogIn" style={{ maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-bold text-gray-900" style={{ fontFamily: "'Sora', sans-serif" }}>
-                {editingProgram ? `Edit Program: ${editingProgram.code}` : 'Create New Program'}
+                Create New Program
               </h2>
               <button onClick={handleCancel} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
             </div>
@@ -252,7 +227,7 @@ const ManagePrograms = () => {
                   <label className={labelClass}>Program Code *</label>
                   <input type="text" name="code" value={formData.code} onChange={handleInputChange}
                     className={inputClass} required placeholder="e.g. BSCS"
-                    maxLength={10} disabled={!!editingProgram} />
+                    maxLength={10} />
                   <p className="text-xs text-gray-300 mt-1">Letters & numbers only, auto-capitalized</p>
                 </div>
                 <div>
@@ -284,7 +259,7 @@ const ManagePrograms = () => {
                 <button type="submit" disabled={saving}
                   className="flex-1 py-2.5 rounded-full text-sm font-semibold text-white transition disabled:opacity-50"
                   style={{ background: NAVY }}>
-                  {saving ? 'Saving…' : editingProgram ? 'Update Program' : 'Create Program'}
+                  {saving ? 'Saving…' : 'Create Program'}
                 </button>
               </div>
             </form>

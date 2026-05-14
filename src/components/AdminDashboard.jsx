@@ -163,11 +163,11 @@ const AdminDashboard = () => {
   ];
 
   const stats = [
-    { label: "Total Students",    value: allStudents.length },
-    { label: "Active Courses",    value: allCourses.length },
-    { label: "Pending",           value: filteredPending.length, warn: true },
+    { label: "Total Students",    value: allStudents.length, tab: "students" },
+    { label: "Active Courses",    value: allCourses.length, tab: "courses" },
+    { label: "Pending",           value: filteredPending.length, warn: true, tab: "pending" },
     { label: "Enrolled",          value: filteredApproved.length, success: true },
-    { label: "Drop Requests",     value: filteredDrops.length, danger: true },
+    { label: "Drop Requests",     value: filteredDrops.length, danger: true, tab: "drop-requests" },
   ];
 
   if (loading) return (
@@ -242,16 +242,6 @@ const AdminDashboard = () => {
               </h1>
               <p className="text-white/60 text-sm mt-0.5">Admin ID: {userData?.studentId}</p>
             </div>
-            <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
-              className="text-sm rounded-lg px-3 py-2 border-0 outline-none cursor-pointer font-medium"
-              style={{ background: "rgba(255,255,255,0.15)", color: "#fff" }}
-              disabled={availableSemesters.length === 0}>
-              {availableSemesters.length === 0 ? (
-                <option value="" style={{ color: NAVY }}>No Enrollment Period yet</option>
-              ) : (
-                availableSemesters.map(s => <option key={s} value={s} style={{ color: NAVY }}>{s}</option>)
-              )}
-            </select>
           </div>
         </div>
 
@@ -272,7 +262,7 @@ const AdminDashboard = () => {
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               {stats.map(s => (
                 <div key={s.label} className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-4 text-center cursor-pointer hover:shadow-md transition"
-                  onClick={() => { if (s.label === 'Pending') setActiveTab('pending'); else if (s.label === 'Drop Requests') setActiveTab('drop-requests'); }}>
+                  onClick={() => { if (s.tab) setActiveTab(s.tab); }}>
                   <p className="text-3xl font-bold" style={{
                     fontFamily: "'Sora', sans-serif",
                     color: s.warn ? "#d97706" : s.success ? "#16a34a" : s.danger ? "#dc2626" : NAVY
@@ -280,6 +270,22 @@ const AdminDashboard = () => {
                   <p className="text-xs text-gray-400 mt-1">{s.label}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Semester Filter */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400 font-medium">Semester</label>
+                <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}
+                  disabled={availableSemesters.length === 0}>
+                  {availableSemesters.length === 0 ? (
+                    <option value="">No Enrollment Period yet</option>
+                  ) : (
+                    availableSemesters.map(s => <option key={s} value={s}>{s}</option>)
+                  )}
+                </select>
+              </div>
             </div>
 
             {/* Approved Enrollments */}
@@ -379,6 +385,18 @@ const AdminDashboard = () => {
             {/* Filters */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
               <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400 font-medium">Semester</label>
+                <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}
+                  disabled={availableSemesters.length === 0}>
+                  {availableSemesters.length === 0 ? (
+                    <option value="">No Enrollment Period yet</option>
+                  ) : (
+                    availableSemesters.map(s => <option key={s} value={s}>{s}</option>)
+                  )}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400 font-medium">Program</label>
                 <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
                   className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}>
@@ -446,6 +464,18 @@ const AdminDashboard = () => {
         {activeTab === "drop-requests" && (
           <div className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4 flex flex-wrap gap-4 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-gray-400 font-medium">Semester</label>
+                <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" style={{ color: "#374151" }}
+                  disabled={availableSemesters.length === 0}>
+                  {availableSemesters.length === 0 ? (
+                    <option value="">No Enrollment Period yet</option>
+                  ) : (
+                    availableSemesters.map(s => <option key={s} value={s}>{s}</option>)
+                  )}
+                </select>
+              </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400 font-medium">Program</label>
                 <select value={selectedProgram} onChange={e => setSelectedProgram(e.target.value)}
